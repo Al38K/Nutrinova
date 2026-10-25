@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>nutrinova</title>
+  <meta name="description" content="Suivi nutritionnel personnel : journal, objectifs, recettes et poids. Données stockées sur l'appareil.">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#0B7A6A" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0B4F46" media="(prefers-color-scheme: dark)">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="nutrinova">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="format-detection" content="telephone=no">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/components.css">
+  <script>
+    // Applique le thème choisi avant le premier affichage (évite un flash clair/sombre).
+    try {
+      var t = localStorage.getItem('nutrinova.theme');
+      if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+    } catch (e) { /* stockage indisponible : thème système */ }
+  </script>
+  <script type="module" src="js/app.js"></script>
+</head>
+<body>
+  <div class="app-bg-top" aria-hidden="true"></div>
+  <div id="app">
+    <header class="appbar" id="appbar">
+      <div class="appbar-inner">
+        <div class="appbar-leading" id="appbar-leading"></div>
+        <h1 class="appbar-title" id="appbar-title">nutrinova</h1>
+        <div class="appbar-trailing" id="appbar-trailing"></div>
+      </div>
+    </header>
+    <main id="view" class="view" tabindex="-1">
+      <div class="boot">
+        <div class="spinner" role="status" aria-label="Chargement"></div>
+      </div>
+    </main>
+    <nav class="tabbar" id="tabbar" aria-label="Navigation principale"></nav>
+  </div>
+  <div class="toast-host" id="toast-host" aria-live="polite"></div>
+  <noscript>
+    <p class="noscript">nutrinova a besoin de JavaScript. Activez-le dans Réglages › Safari › Avancé.</p>
+  </noscript>
+</body>
+</html>
