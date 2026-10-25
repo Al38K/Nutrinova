@@ -384,3 +384,35 @@ label.row:active { background: var(--surface-pressed); }
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
 }
 .scanner-manual { background: rgba(255, 255, 255, 0.18); color: #fff; }
+
+/* =====================================================================
+   Phase 4 — recettes : liste, fiche, éditeur
+   ===================================================================== */
+
+.appbar-btn-strong { font-weight: var(--fw-semibold); }
+.appbar-btn:disabled { opacity: 0.4; }
+
+/* Nombre de portions : − [champ] + ; les boutons s'alignent sur le champ, sous son libellé. */
+.stepper {
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr) 46px;
+  gap: var(--sp-2);
+  align-items: start;
+}
+.stepper-btn {
+  width: 46px;
+  height: 46px;
+  margin-top: calc(var(--fs-footnote) * 1.35 + var(--sp-1));
+  border-radius: var(--radius-m);
+}
+.stepper-sign { font-size: 1.5rem; line-height: 1; font-weight: var(--fw-semibold); }
+.stepper .input { text-align: center; }
+
+/* Tableau Total / Portion / 100 g : les nombres ne se coupent pas. */
+.recipe-table td, .recipe-table thead th { white-space: nowrap; }
+.recipe-table td { width: 22%; }
+
+/* Ligne d'ingrédient : les étiquettes passent à la ligne sous la quantité si nécessaire. */
+.entry-sub .chip-inline { margin-top: 2px; }
+.entry-row .row-chevron { margin-left: calc(-1 * var(--sp-1)); }
+.ingredient-add { margin-top: var(--sp-3); }

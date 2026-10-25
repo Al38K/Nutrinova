@@ -9,6 +9,7 @@ import { setFavorite } from '../data/foods.js';
 import { ciqualLabel } from '../data/ciqual.js';
 import { formatQty } from '../components/journal-parts.js';
 import { openFoodForm } from './food-form.js';
+import { navigate } from '../router.js';
 
 const MEAL_SHORT = Object.freeze({ breakfast: 'Petit-déj.', lunch: 'Déjeuner', dinner: 'Dîner', snack: 'Snack' });
 
@@ -329,6 +330,11 @@ export function openEntrySheet({ food, entry, date, meal, onDone, info = null })
 
       const fix = editing ? null : () => {
         close();
+        if (current.source === 'recipe' && current.sourceRef) {
+          // Les valeurs d'une recette viennent de ses ingrédients : on les complète dans la recette.
+          navigate(`recipe-edit/${current.sourceRef}`);
+          return;
+        }
         openFoodForm({
           food: current,
           onSaved: (saved) => openEntrySheet({ food: saved, date, meal: state.meal, onDone })

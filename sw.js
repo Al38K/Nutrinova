@@ -2,7 +2,7 @@
  * À CHAQUE LIVRAISON : la valeur VERSION doit être identique à APP_VERSION dans js/config.js.
  * Changer VERSION déclenche la mise à jour de l'app sur l'iPhone.
  */
-const VERSION = '1.2.0';
+const VERSION = '1.3.0';
 const CACHE_PREFIX = 'nutrinova-';
 const CACHE_NAME = CACHE_PREFIX + VERSION;
 
@@ -39,19 +39,24 @@ const APP_FILES = [
   './js/data/off.js',
   './js/data/search.js',
   './js/data/ciqual.js',
+  './js/data/recipes.js',
   './js/components/journal-parts.js',
   './js/components/energy-split.js',
   './js/components/food-search.js',
+  './js/components/recipe-parts.js',
   './js/sheets/entry-sheet.js',
   './js/sheets/food-form.js',
   './js/sheets/food-picker.js',
   './js/sheets/backup-sheets.js',
   './js/sheets/food-sheet.js',
   './js/sheets/scan-flow.js',
+  './js/sheets/ingredient-sheets.js',
   './js/scanner/scanner.js',
   './js/views/journal.js',
   './js/views/foods.js',
   './js/views/recipes.js',
+  './js/views/recipe.js',
+  './js/views/recipe-edit.js',
   './js/views/weight.js',
   './js/views/settings.js',
   './js/views/design.js',

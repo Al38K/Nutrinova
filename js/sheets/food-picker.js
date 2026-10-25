@@ -1,10 +1,10 @@
 // Choix d'un aliment à ajouter à un repas : recherche (vos aliments, Ciqual, Open Food Facts),
-// scan du code-barres, favoris et historique, création d'un aliment personnalisé.
+// scan du code-barres, favoris, recettes et historique, création d'un aliment personnalisé.
 // Le « + » de chaque ligne ajoute directement la quantité par défaut (2 tapotements depuis le Journal).
 
 import { h, openSheet, iconEl, toast } from '../ui.js';
 import { MEAL_LABELS } from '../data/model.js';
-import { listFoods, favoritesOf, recentsOf } from '../data/foods.js';
+import { listFoods, favoritesOf, recentsOf, compareFoods } from '../data/foods.js';
 import { ensureCiqual } from '../data/ciqual.js';
 import { openEntrySheet, quickAdd } from './entry-sheet.js';
 import { openFoodForm } from './food-form.js';
@@ -12,6 +12,7 @@ import { startScan, resolveOffHit } from './scan-flow.js';
 import { createFoodSearch, foodRow, localSub, group } from '../components/food-search.js';
 
 const MAX_RECENTS = 20;
+const MAX_RECIPES = 10;
 
 export async function openFoodPicker({ date, meal, onDone }) {
   let foods;
@@ -77,12 +78,19 @@ export async function openFoodPicker({ date, meal, onDone }) {
 
       const renderEmpty = (container) => {
         const favs = favoritesOf(foods);
-        const recents = recentsOf(foods, MAX_RECENTS).filter((f) => !f.favorite);
+        // Recettes non favorites : les plus récemment utilisées d'abord, puis par nom.
+        const recipes = foods
+          .filter((f) => f.source === 'recipe' && !f.favorite)
+          .sort(compareFoods)
+          .slice(0, MAX_RECIPES);
+        const shown = new Set([...favs, ...recipes].map((f) => f.id));
+        const recents = recentsOf(foods, MAX_RECENTS).filter((f) => !shown.has(f.id));
         const parts = [];
         if (favs.length) parts.push(group('Favoris', favs.map(localRow)));
+        if (recipes.length) parts.push(group('Vos recettes', recipes.map(localRow)));
         if (recents.length) parts.push(group('Récents', recents.map(localRow)));
         if (!parts.length) {
-          parts.push(h('p', { class: 'hint' }, 'Recherchez un aliment (ex. « pomme », « riz cuit »), scannez un produit emballé ou créez votre propre aliment. Vos favoris et vos derniers aliments apparaîtront ici.'));
+          parts.push(h('p', { class: 'hint' }, 'Recherchez un aliment (ex. « pomme », « riz cuit »), scannez un produit emballé ou créez votre propre aliment. Vos favoris, vos recettes et vos derniers aliments apparaîtront ici.'));
         } else {
           parts.push(h('p', { class: 'hint' }, 'Touchez un aliment pour choisir la quantité, ou « + » pour ajouter la quantité indiquée.'));
         }

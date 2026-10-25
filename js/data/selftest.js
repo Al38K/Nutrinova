@@ -1,7 +1,7 @@
 // Autotest, lancé depuis Réglages. Vérifie sur l'iPhone lui-même :
 // structure de la base, écritures/relectures, index, transactions, calculs, validations,
 // journal (ajout, modification, suppression), objectifs versionnés, contrôle des sauvegardes,
-// codes-barres, lecture des fiches Open Food Facts (exemples), vos aliments et la table Ciqual.
+// codes-barres, lecture des fiches Open Food Facts (exemples), vos aliments, la table Ciqual et les recettes.
 // Les enregistrements de test sont datés de janvier 1900 et supprimés à la fin, même en cas d'échec.
 
 import * as db from './db.js';
@@ -17,6 +17,7 @@ import { offToFood, offHitSummary } from './off.js';
 import { rankLocalFoods, queryWords, matchScore } from './search.js';
 import { setFavorite, updateFood, deleteFood, restoreFood, findFoodsByBarcode, findBySource } from './foods.js';
 import { ensureCiqual, searchCiqual, getCiqualState, ciqualToFood } from './ciqual.js';
+import { computeRecipe, saveRecipe, deleteRecipe, restoreRecipe, getRecipeBundle, ingredientFromFood } from './recipes.js';
 import { localDateKey, isDateKey, addDays } from '../util/dates.js';
 import { normalizeName } from '../util/text.js';
 import { parseDecimal, formatNutrient, formatGrams } from '../util/format.js';
@@ -30,6 +31,7 @@ const TEST_IDS = {
   entry: 'selftest-entry',
   entry2: 'selftest-entry-2',
   recipe: 'selftest-recipe',
+  recipe2: 'selftest-recipe-2',
   goal: 'selftest-goal',
   goal2: 'selftest-goal-2',
   ciqual: 'SELFTEST',
@@ -64,7 +66,7 @@ async function cleanup() {
   await db.run(Object.values(STORES), 'readwrite', async (tx) => {
     const foods = tx.objectStore(STORES.foods);
     for (const id of [TEST_IDS.custom, TEST_IDS.offFood]) foods.delete(id);
-    for (const ref of [['ciqual', TEST_REFS.ciqual], ['off', TEST_REFS.off]]) {
+    for (const ref of [['ciqual', TEST_REFS.ciqual], ['off', TEST_REFS.off], ['recipe', TEST_IDS.recipe2]]) {
       const keys = await db.req(foods.index('source_ref').getAllKeys(ref));
       for (const k of keys) foods.delete(k);
     }
@@ -78,6 +80,7 @@ async function cleanup() {
     tx.objectStore(STORES.journal).delete(TEST_IDS.entry);
     tx.objectStore(STORES.journal).delete(TEST_IDS.entry2);
     tx.objectStore(STORES.recipes).delete(TEST_IDS.recipe);
+    tx.objectStore(STORES.recipes).delete(TEST_IDS.recipe2);
     tx.objectStore(STORES.goals).delete(TEST_IDS.goal);
     tx.objectStore(STORES.goals).delete(TEST_IDS.goal2);
     tx.objectStore(STORES.weights).delete(TEST_DATE);
@@ -425,6 +428,81 @@ const TESTS = [
       const keys = await db.run(STORES.foods, 'readonly', (tx) => db.req(tx.objectStore(STORES.foods).index('source_ref').getAllKeys(['ciqual', TEST_REFS.ciqual])));
       assertEq(keys.length, 1, 'Une seule copie');
       return '2 ajouts, 1 aliment enregistré';
+    }
+  },
+  {
+    name: 'Recettes : total, portion, 100 g, poids cuit, valeurs manquantes',
+    async run() {
+      const nul = { fiber: null, sugars: null, salt: null, alcohol: null };
+      const a = { foodId: 'a', name: 'A', basis: 'g', per100: { kcal: 100, protein: 10, carbs: 0, fat: 5, ...nul }, quantity: 200, inputUnit: 'g', inputValue: 200 };
+      const b = { foodId: 'b', name: 'B', basis: 'ml', per100: { kcal: 50, protein: 3, carbs: 5, fat: 2, fiber: 0, sugars: 5, salt: 0.1, alcohol: 0 }, quantity: 100, inputUnit: 'ml', inputValue: 100 };
+      const raw = computeRecipe({ ingredients: [a, b], servings: 2 });
+      assertEq(raw.rawWeight, 300, 'Poids cru : 200 g + 100 ml comptés 100 g');
+      assert(raw.hasMl, 'Ingrédient en ml signalé');
+      assert(approx(raw.total.kcal, 250) && approx(raw.total.protein, 23) && approx(raw.total.fat, 12), `Total 250 kcal, 23 g P, 12 g L (obtenu ${raw.total.kcal})`);
+      assert(approx(raw.perServing.kcal, 125) && approx(raw.servingWeight, 150), 'Par portion : 125 kcal pour 150 g');
+      assert(approx(raw.per100.kcal, 250 / 3), 'Pour 100 g (poids cru) : 83,3 kcal');
+      assert(raw.total.fiber === null && raw.per100.fiber === null, 'Fibres inconnues pour un ingrédient → inconnues pour la recette, jamais une somme partielle');
+      assertEq(raw.missing.fiber, [0], 'Ingrédient sans fibres identifié');
+      const cooked = computeRecipe({ ingredients: [a, b], servings: 2, cookedWeight: 250 });
+      assert(approx(cooked.per100.kcal, 100) && approx(cooked.servingWeight, 125), 'Poids cuit 250 g : 100 kcal/100 g, portion 125 g');
+      assert(approx(cooked.perServing.kcal, 125), 'Le poids cuit ne change pas les valeurs par portion');
+      assert(computeRecipe({ ingredients: [a, b], servings: 1, cookedWeight: 10 }).errors.length === 1, 'Poids cuit impossible refusé');
+      assert(computeRecipe({ ingredients: [a], servings: 1, cookedWeight: 1000 }).warnings.some((w) => w.code === 'cooked-ratio'), 'Poids final 5 fois le poids cru : avertissement');
+      expectThrow(() => createRecipe({ name: 'X', ingredients: [{ ...a, quantity: -1 }] }), ValidationError, 'Quantité négative refusée');
+      expectThrow(() => createRecipe({ name: 'X', ingredients: [{ ...b, inputUnit: 'g' }] }), ValidationError, 'Grammes pour un ingrédient en ml refusés');
+      expectThrow(() => createRecipe({ name: 'X', servings: 0, ingredients: [a] }), ValidationError, '0 portion refusée');
+      return '200 g + 100 ml → 250 kcal, 125 kcal/portion, 100 kcal/100 g cuit';
+    }
+  },
+  {
+    name: 'Recettes : enregistrement, aliment réutilisable, journal, suppression',
+    async run() {
+      const base = testFood({ per100: { kcal: 100, protein: 10, carbs: 0, fat: 5 } });
+      await db.put(STORES.foods, base);
+      const ciq = createFood({ source: 'ciqual', sourceRef: TEST_REFS.ciqual, name: 'Autotest Ciqual', per100: { kcal: 40, protein: 1, carbs: 8, fat: 0.2 } });
+      const input = {
+        id: TEST_IDS.recipe2,
+        name: 'Autotest recette',
+        servings: 4,
+        cookedWeight: 400,
+        ingredients: [
+          ingredientFromFood(base, { quantity: 200, inputUnit: 'g', inputValue: 200 }),
+          ingredientFromFood(ciq, { quantity: 300, inputUnit: 'g', inputValue: 300 })
+        ]
+      };
+      const first = await saveRecipe(input);
+      const rf = first.food;
+      assertEq([rf.source, rf.sourceRef, rf.basis, first.recipe.foodId], ['recipe', TEST_IDS.recipe2, 'g', rf.id], 'Aliment lié à la recette');
+      // 200 + 120 = 320 kcal ; 400 g cuits → 80 kcal pour 100 g ; portion 100 g
+      assert(approx(rf.per100.kcal, 80) && approx(rf.servingSize, 100), `80 kcal/100 g, portion 100 g (obtenu ${rf.per100.kcal}, ${rf.servingSize})`);
+      const storedCiq = await findBySource('ciqual', TEST_REFS.ciqual);
+      assert(storedCiq && first.recipe.ingredients[1].foodId === storedCiq.id, 'Ingrédient Ciqual relié à vos aliments');
+      await setFavorite(rf, true);
+      const again = await saveRecipe({ ...input, servings: 2, cookedWeight: null });
+      assertEq(again.food.id, rf.id, 'Modification : même aliment');
+      assert(again.food.favorite, 'Favori conservé après modification');
+      assert(approx(again.food.per100.kcal, 64) && approx(again.food.servingSize, 250), '500 g crus : 64 kcal/100 g, portion 250 g');
+      const keys = await db.run(STORES.foods, 'readonly', (tx) => db.req(tx.objectStore(STORES.foods).index('source_ref').getAllKeys(['ciqual', TEST_REFS.ciqual])));
+      assertEq(keys.length, 1, 'Ingrédient Ciqual enregistré une seule fois');
+      const entry = await addEntry({ date: TEST_DATE, meal: 'dinner', food: again.food, quantity: again.food.servingSize, inputUnit: 'portion', inputValue: 1 });
+      assert(approx(scaleNutrients(entry.per100Snapshot, entry.quantity).kcal, 160), '1 portion au journal = 160 kcal');
+      let selfRefused = false;
+      try {
+        await saveRecipe({ ...input, ingredients: [...input.ingredients, ingredientFromFood(again.food, { quantity: 50, inputUnit: 'g', inputValue: 50 })] });
+      } catch (err) {
+        selfRefused = err instanceof ValidationError;
+      }
+      assert(selfRefused, 'Une recette ne peut pas être son propre ingrédient');
+      const backup = validateBackup({ format: BACKUP_FORMAT, formatVersion: BACKUP_FORMAT_VERSION, schemaVersion: SCHEMA_VERSION, data: { recipes: [again.recipe], foods: [again.food] } });
+      assertEq(backup.data.recipes[0].ingredients[1].per100.kcal, 40, 'Sauvegarde : valeurs des ingrédients conservées');
+      const removed = await deleteRecipe(TEST_IDS.recipe2);
+      assert(!(await getRecipeBundle(TEST_IDS.recipe2)) && !(await db.get(STORES.foods, rf.id)), 'Recette et aliment supprimés ensemble');
+      assert(await db.get(STORES.journal, entry.id), 'Entrée du journal conservée après suppression');
+      await restoreRecipe(removed);
+      const back = await getRecipeBundle(TEST_IDS.recipe2);
+      assert(back && back.food && back.food.id === rf.id, 'Suppression annulée');
+      return 'aliment lié, valeurs recalculées, 1 portion = 160 kcal, suppression annulable';
     }
   },
   {

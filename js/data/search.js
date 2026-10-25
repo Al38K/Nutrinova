@@ -37,8 +37,13 @@ export function matchScore(nameNorm, words) {
   return score - text.length / 8;
 }
 
+/** Aliments créés par vous (aliments personnalisés et recettes) : prioritaires dans la recherche. */
+export function isPersonal(food) {
+  return food.source === 'custom' || food.source === 'recipe';
+}
+
 /**
- * Vos aliments correspondant à la recherche. Ordre : aliments personnalisés d'abord,
+ * Vos aliments correspondant à la recherche. Ordre : aliments personnalisés et recettes d'abord,
  * puis favoris, puis pertinence, puis dernière utilisation.
  */
 export function rankLocalFoods(foods, query) {
@@ -50,8 +55,8 @@ export function rankLocalFoods(foods, query) {
     if (score >= 0) scored.push({ food, score });
   }
   scored.sort((a, b) => {
-    const ca = a.food.source === 'custom' ? 0 : 1;
-    const cb = b.food.source === 'custom' ? 0 : 1;
+    const ca = isPersonal(a.food) ? 0 : 1;
+    const cb = isPersonal(b.food) ? 0 : 1;
     if (ca !== cb) return ca - cb;
     if (Boolean(a.food.favorite) !== Boolean(b.food.favorite)) return a.food.favorite ? -1 : 1;
     if (a.score !== b.score) return b.score - a.score;

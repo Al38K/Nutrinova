@@ -34,7 +34,9 @@ export const LIMITS = Object.freeze({
   kcalGoalMax: 10000,
   weightMinKg: 20,
   weightMaxKg: 500,
-  servingsMax: 100
+  servingsMax: 100,
+  ingredientsMax: 60,
+  cookedWeightMax: 100000 // g, poids final d'une recette
 });
 
 export class ValidationError extends Error {
@@ -168,18 +170,52 @@ export function createCiqualItem(input = {}) {
 
 // ---------- Recettes ----------
 
+/**
+ * Ingrédient d'une recette, avec un INSTANTANÉ de l'aliment (nom, unité de base, valeurs pour 100) :
+ * la recette reste calculable même si l'aliment est supprimé plus tard.
+ * quantity = quantité résolue en g ou ml ; inputUnit/inputValue = saisie d'origine (ex. 2 portions).
+ * per100 null = valeurs inconnues (ancien format sans instantané).
+ */
+export function createIngredient(ing, i = 0) {
+  const n = i + 1;
+  const f = (k) => `ingredients.${i}.${k}`;
+  if (!ing || typeof ing.foodId !== 'string' || !ing.foodId) {
+    throw new ValidationError(f('foodId'), `Ingrédient ${n} : aliment manquant.`);
+  }
+  const basis = oneOf(f('basis'), ing.basis ?? 'g', BASES, `Ingrédient ${n} : unité`);
+  const quantity = requiredPositive(f('quantity'), ing.quantity, `Ingrédient ${n} : quantité`, LIMITS.quantityMax);
+  const inputUnit = oneOf(f('inputUnit'), ing.inputUnit ?? basis, INPUT_UNITS, `Ingrédient ${n} : unité de saisie`);
+  if (inputUnit !== 'portion' && inputUnit !== basis) {
+    throw new ValidationError(f('inputUnit'), `Ingrédient ${n} : cet aliment se mesure en ${basis}, pas en ${inputUnit}.`);
+  }
+  const inputValue = requiredPositive(f('inputValue'), ing.inputValue ?? quantity, `Ingrédient ${n} : valeur saisie`, LIMITS.quantityMax);
+  let per100 = null;
+  if (ing.per100 !== null && ing.per100 !== undefined) {
+    try {
+      per100 = normalizeNutrients(ing.per100);
+    } catch (err) {
+      if (err instanceof NutrientError) throw new ValidationError(f(`per100.${err.key}`), `Ingrédient ${n} : ${err.message}`);
+      throw err;
+    }
+  }
+  return {
+    foodId: ing.foodId,
+    name: optionalText(ing.name),
+    basis,
+    per100,
+    quantity,
+    inputUnit,
+    inputValue
+  };
+}
+
 export function createRecipe(input = {}) {
   const now = nowIso();
   const ingredients = Array.isArray(input.ingredients) ? input.ingredients : [];
-  const cleanIngredients = ingredients.map((ing, i) => {
-    if (!ing || typeof ing.foodId !== 'string' || !ing.foodId) {
-      throw new ValidationError(`ingredients.${i}.foodId`, `Ingrédient ${i + 1} : aliment manquant.`);
-    }
-    return {
-      foodId: ing.foodId,
-      quantity: requiredPositive(`ingredients.${i}.quantity`, ing.quantity, `Ingrédient ${i + 1} : quantité`, LIMITS.quantityMax)
-    };
-  });
+  if (ingredients.length > LIMITS.ingredientsMax) {
+    throw new ValidationError('ingredients', `${LIMITS.ingredientsMax} ingrédients au maximum par recette.`);
+  }
+  const cleanIngredients = ingredients.map((ing, i) => createIngredient(ing, i));
   const servings = input.servings ?? 1;
   if (!Number.isInteger(servings) || servings < 1 || servings > LIMITS.servingsMax) {
     throw new ValidationError('servings', `Nombre de portions : entier entre 1 et ${LIMITS.servingsMax}.`);
@@ -189,7 +225,7 @@ export function createRecipe(input = {}) {
     name: requiredText('name', input.name, 'Nom de la recette'),
     ingredients: cleanIngredients,
     servings,
-    cookedWeight: positiveOrNull('cookedWeight', input.cookedWeight, 'Poids cuit', LIMITS.quantityMax * 10),
+    cookedWeight: positiveOrNull('cookedWeight', input.cookedWeight, 'Poids final', LIMITS.cookedWeightMax),
     foodId: input.foodId || null,
     createdAt: input.createdAt || now,
     updatedAt: now

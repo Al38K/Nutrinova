@@ -1,6 +1,7 @@
 // Fiche d'un aliment : valeurs pour 100 g/ml, portion, source et licence, favori,
 // ajout au journal, modification, suppression. Sert aussi pour un résultat Ciqual ou
 // Open Food Facts pas encore enregistré (aperçu).
+// Un aliment issu d'une recette se modifie et se supprime depuis sa recette (onglet Recettes).
 
 import { h, openSheet, toast, iconEl, banner, confirmDialog } from '../ui.js';
 import { formatNutrient, formatNumber, isNum } from '../util/format.js';
@@ -13,6 +14,7 @@ import { getCiqualState } from '../data/ciqual.js';
 import { formatQty } from '../components/journal-parts.js';
 import { openEntrySheet, dataWarnings, infoNotes, sourceLabel } from './entry-sheet.js';
 import { openFoodForm } from './food-form.js';
+import { navigate } from '../router.js';
 
 const ROWS = ['kcal', 'fat', 'carbs', 'sugars', 'fiber', 'protein', 'salt', 'alcohol'];
 const LABELS = { kcal: 'Énergie', fat: 'Lipides', carbs: 'Glucides', sugars: 'dont sucres', fiber: 'Fibres', protein: 'Protéines', salt: 'Sel', alcohol: 'Alcool' };
@@ -32,7 +34,7 @@ function nutrientTable(food) {
   );
 }
 
-function sourceBlock(food) {
+function sourceBlock(food, openRecipe) {
   if (food.source === 'off') {
     return h('p', { class: 'hint' },
       'Données ',
@@ -49,7 +51,12 @@ function sourceBlock(food) {
       'Valeurs moyennes pour 100 g.'
     );
   }
-  if (food.source === 'recipe') return h('p', { class: 'hint' }, 'Aliment issu d\'une recette.');
+  if (food.source === 'recipe') {
+    return h('div', { class: 'stack' },
+      h('button', { type: 'button', class: 'btn btn-plain btn-block', onclick: openRecipe }, iconEl('recipes'), 'Voir la recette'),
+      h('p', { class: 'hint' }, 'Aliment calculé à partir d\'une recette : valeurs pour 100 g du plat, 1 portion = poids final ÷ nombre de portions.')
+    );
+  }
   return h('p', { class: 'hint' }, `Aliment personnel${food.createdAt ? `, créé le ${formatDateTime(food.createdAt)}` : ''}.`);
 }
 
@@ -83,8 +90,17 @@ export async function openFoodSheet({ food, onChange, info = null }) {
       });
       paintFav();
 
+      const isRecipe = current.source === 'recipe' && Boolean(current.sourceRef);
+      const openRecipe = () => {
+        close();
+        navigate(`recipe/${current.sourceRef}`);
+      };
       const edit = () => {
         close();
+        if (isRecipe) {
+          navigate(`recipe-edit/${current.sourceRef}`);
+          return;
+        }
         openFoodForm({ food: current, onSaved: (saved) => { if (onChange) onChange(); openFoodSheet({ food: saved, onChange }); } });
       };
 
@@ -145,10 +161,11 @@ export async function openFoodSheet({ food, onChange, info = null }) {
           }
         }, iconEl('plus'), 'Ajouter au journal'),
         favBtn,
-        h('button', { type: 'button', class: 'btn btn-plain btn-block', onclick: edit }, iconEl('edit'), stored && current.source === 'custom' ? 'Modifier' : 'Modifier les valeurs'),
-        stored ? h('button', { type: 'button', class: 'btn btn-destructive btn-block', onclick: remove }, iconEl('trash'), 'Supprimer de mes aliments') : null,
+        h('button', { type: 'button', class: 'btn btn-plain btn-block', onclick: edit }, iconEl('edit'),
+          isRecipe ? 'Modifier la recette' : stored && current.source === 'custom' ? 'Modifier' : 'Modifier les valeurs'),
+        stored && !isRecipe ? h('button', { type: 'button', class: 'btn btn-destructive btn-block', onclick: remove }, iconEl('trash'), 'Supprimer de mes aliments') : null,
         !stored ? banner({ kind: 'info', text: 'Aperçu : cet aliment sera ajouté à vos aliments dès que vous l\'utiliserez ou le mettrez en favori.' }) : null,
-        sourceBlock(current)
+        sourceBlock(current, openRecipe)
       );
     }
   });

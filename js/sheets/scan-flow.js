@@ -47,9 +47,14 @@ export async function ensureOffNotice() {
   });
 }
 
-/** Affiche l'aliment trouvé : feuille de quantité (ajout au journal) ou fiche (onglet Aliments). */
+/**
+ * Affiche l'aliment trouvé : feuille de quantité (ajout au journal), fiche (onglet Aliments),
+ * ou choix d'un ingrédient de recette (mode 'pick').
+ */
 function present(food, ctx, info) {
-  if (ctx.mode === 'add') {
+  if (ctx.mode === 'pick') {
+    ctx.onPick(food, info);
+  } else if (ctx.mode === 'add') {
     openEntrySheet({ food, date: ctx.date, meal: ctx.meal, onDone: ctx.onDone, info });
   } else {
     openFoodSheet({ food, onChange: ctx.onDone, info });
@@ -89,7 +94,7 @@ function errorSheet(err, code, ctx) {
 
 /**
  * Cherche un code-barres : vos aliments, puis Open Food Facts.
- * ctx : { mode: 'add' | 'browse', date, meal, onDone }
+ * ctx : { mode: 'add' | 'browse' | 'pick', date, meal, onDone, onPick }
  */
 export async function handleBarcode(rawCode, ctx) {
   const code = canonicalBarcode(rawCode);
