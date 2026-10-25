@@ -14,6 +14,8 @@ import { getServiceWorkerVersion } from '../pwa.js';
 import { formatBytes, formatNumber, formatKcal } from '../util/format.js';
 import { formatDateTime, localDateKey, daysSince } from '../util/dates.js';
 import { openExportSheet, handleImportFile } from '../sheets/backup-sheets.js';
+import { openReminderSheet } from '../sheets/weight-sheets.js';
+import { getReminder, reminderLabel } from '../data/reminder.js';
 import { refresh } from '../router.js';
 import { APP_VERSION } from '../config.js';
 
@@ -73,7 +75,7 @@ export default {
   async render(root) {
     setAppbar({ title: 'Réglages' });
 
-    const [settings, persisted, estimate, counts, swVersion, goal, offCached] = await Promise.all([
+    const [settings, persisted, estimate, counts, swVersion, goal, offCached, weighReminder] = await Promise.all([
       getAllSettings(),
       checkPersisted(),
       estimateStorage(),
@@ -81,6 +83,7 @@ export default {
       getServiceWorkerVersion(),
       getGoalForDate(localDateKey()),
       getAllByIndex(STORES.foods, 'source', 'off').then((l) => l.length).catch(() => null),
+      getReminder().catch(() => null),
       ensureCiqual().catch(() => null)
     ]);
     const ciqual = getCiqualState();
@@ -167,6 +170,17 @@ export default {
           value: goal ? formatKcal(goal.kcal) : 'Non définis',
           iconName: 'target',
           href: '#/goals'
+        })]
+      }),
+      section({
+        header: 'Suivi du poids',
+        rows: [row({
+          title: 'Rappel de pesée',
+          subtitle: weighReminder && !weighReminder.enabled ? 'Bannière désactivée' : 'Bannière dans l\'app · Calendrier en option',
+          value: weighReminder ? reminderLabel(weighReminder) : '—',
+          iconName: 'bell',
+          onClick: () => openReminderSheet({ onDone: refresh }),
+          chevron: true
         })]
       }),
       section({

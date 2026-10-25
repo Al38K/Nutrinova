@@ -14,6 +14,9 @@ import { entryRow, macroLine, remainingCaption, partialNote } from '../component
 import { openFoodPicker } from '../sheets/food-picker.js';
 import { openEntrySheet } from '../sheets/entry-sheet.js';
 import { openExportSheet } from '../sheets/backup-sheets.js';
+import { latestWeight, listWeights } from '../data/weights.js';
+import { getReminder, reminderStatus } from '../data/reminder.js';
+import { openWeightSheet, weighBanner } from '../sheets/weight-sheets.js';
 import { refresh } from '../router.js';
 
 const DEFAULT_BACKUP_REMINDER_DAYS = 7;
@@ -128,6 +131,22 @@ async function backupReminder(date, today) {
   });
 }
 
+/** Bannière de pesée (aujourd'hui seulement) : pesée prévue non saisie. Ne bloque jamais le Journal. */
+async function weighReminder(date, today) {
+  if (date !== today) return null;
+  try {
+    const [reminder, latest] = await Promise.all([getReminder(), latestWeight()]);
+    const status = reminderStatus(reminder, latest ? latest.date : null);
+    return weighBanner(status, async () => {
+      const weights = await listWeights();
+      openWeightSheet({ weights, onDone: refresh });
+    });
+  } catch (err) {
+    console.warn('Rappel de pesée non évalué :', err);
+    return null;
+  }
+}
+
 export default {
   tab: 'journal',
   async render(root, { params, navigate }) {
@@ -141,10 +160,11 @@ export default {
         : h('a', { class: 'appbar-btn', href: '#/goals', 'aria-label': 'Objectifs' }, iconEl('target'))
     });
 
-    const [entries, goal, reminder] = await Promise.all([
+    const [entries, goal, reminder, weighing] = await Promise.all([
       getEntriesForDate(date),
       getGoalForDate(date),
-      backupReminder(date, today)
+      backupReminder(date, today),
+      weighReminder(date, today)
     ]);
     const totals = computeTotals(entries);
     const targets = goalTargets(goal);
@@ -152,6 +172,7 @@ export default {
 
     mount(root,
       installBanner(),
+      weighing,
       reminder,
       dayNav(date, navigate),
       hero(date, day.values.kcal, targets.kcal),

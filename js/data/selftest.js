@@ -1,7 +1,8 @@
 // Autotest, lancé depuis Réglages. Vérifie sur l'iPhone lui-même :
 // structure de la base, écritures/relectures, index, transactions, calculs, validations,
 // journal (ajout, modification, suppression), objectifs versionnés, contrôle des sauvegardes,
-// codes-barres, lecture des fiches Open Food Facts (exemples), vos aliments, la table Ciqual et les recettes.
+// codes-barres, lecture des fiches Open Food Facts (exemples), vos aliments, la table Ciqual, les recettes,
+// les pesées, la moyenne mobile et le rappel de pesée (échéances, fichier calendrier).
 // Les enregistrements de test sont datés de janvier 1900 et supprimés à la fin, même en cas d'échec.
 
 import * as db from './db.js';
@@ -18,6 +19,8 @@ import { rankLocalFoods, queryWords, matchScore } from './search.js';
 import { setFavorite, updateFood, deleteFood, restoreFood, findFoodsByBarcode, findBySource } from './foods.js';
 import { ensureCiqual, searchCiqual, getCiqualState, ciqualToFood } from './ciqual.js';
 import { computeRecipe, saveRecipe, deleteRecipe, restoreRecipe, getRecipeBundle, ingredientFromFood } from './recipes.js';
+import { saveWeight, deleteWeight, restoreWeights, listWeights, movingAverage, monthsBefore, periodStart, weightStats, hasAtMostOneDecimal } from './weights.js';
+import { lastOccurrence, nextOccurrence, reminderStatus, buildReminderIcs, vtimezone, normalizeReminder } from './reminder.js';
 import { localDateKey, isDateKey, addDays } from '../util/dates.js';
 import { normalizeName } from '../util/text.js';
 import { parseDecimal, formatNutrient, formatGrams } from '../util/format.js';
@@ -25,6 +28,7 @@ import { APP_VERSION } from '../config.js';
 
 const TEST_DATE = '1900-01-01';
 const TEST_DATE_2 = '1900-01-10';
+const TEST_DATE_3 = '1900-01-02';
 const TEST_IDS = {
   food: 'selftest-food',
   food2: 'selftest-food-rollback',
@@ -84,6 +88,8 @@ async function cleanup() {
     tx.objectStore(STORES.goals).delete(TEST_IDS.goal);
     tx.objectStore(STORES.goals).delete(TEST_IDS.goal2);
     tx.objectStore(STORES.weights).delete(TEST_DATE);
+    tx.objectStore(STORES.weights).delete(TEST_DATE_2);
+    tx.objectStore(STORES.weights).delete(TEST_DATE_3);
     tx.objectStore(STORES.ciqual).delete(TEST_IDS.ciqual);
   });
 }
@@ -503,6 +509,86 @@ const TESTS = [
       const back = await getRecipeBundle(TEST_IDS.recipe2);
       assert(back && back.food && back.food.id === rf.id, 'Suppression annulée');
       return 'aliment lié, valeurs recalculées, 1 portion = 160 kcal, suppression annulable';
+    }
+  },
+  {
+    name: 'Pesées : une par jour, changement de date, suppression, annulation',
+    async run() {
+      const today = '1900-01-31';
+      const a = await saveWeight({ date: TEST_DATE, weightKg: 72.4 }, { today });
+      assertEq(a.weight.weightKg, 72.4, 'Pesée enregistrée');
+      const b = await saveWeight({ date: TEST_DATE, weightKg: 72.1, note: 'au réveil' }, { today });
+      assert(b.replaced && b.replaced.weightKg === 72.4, 'Même jour : la nouvelle pesée remplace l\'ancienne (signalé)');
+      assertEq(b.weight.createdAt, a.weight.createdAt, 'Date de création conservée');
+      await saveWeight({ date: TEST_DATE_2, weightKg: 71.6 }, { today });
+      const moved = await saveWeight({ date: TEST_DATE_3, weightKg: 72.0 }, { originalDate: TEST_DATE, today });
+      assert(moved.replaced === null, 'Changement de date vers un jour libre : rien d\'écrasé');
+      assert(!(await db.get(STORES.weights, TEST_DATE)) && (await db.get(STORES.weights, TEST_DATE_3)), 'L\'ancienne date est libérée');
+      const over = await saveWeight({ date: TEST_DATE_2, weightKg: 71.9 }, { originalDate: TEST_DATE_3, today });
+      assert(over.replaced && over.replaced.weightKg === 71.6, 'Changement de date vers un jour déjà pesé : remplacement signalé');
+      let refused = 0;
+      for (const bad of [{ date: '1900-02-01', weightKg: 70 }, { date: TEST_DATE, weightKg: 70.25 }, { date: TEST_DATE, weightKg: 15 }]) {
+        try { await saveWeight(bad, { today }); } catch (err) { if (err instanceof ValidationError) refused += 1; }
+      }
+      assertEq(refused, 3, 'Date future, 2 décimales, 15 kg refusés');
+      assert(hasAtMostOneDecimal(70.4) && hasAtMostOneDecimal(70) && !hasAtMostOneDecimal(70.45), 'Une décimale au maximum');
+      const removed = await deleteWeight(TEST_DATE_2);
+      assert(removed && !(await db.get(STORES.weights, TEST_DATE_2)), 'Pesée supprimée');
+      await restoreWeights([removed]);
+      assertEq((await db.get(STORES.weights, TEST_DATE_2)).weightKg, 71.9, 'Suppression annulée');
+      const all = await listWeights();
+      const mine = all.filter((w) => w.date < '1900-12-31').map((w) => w.date);
+      assertEq(mine, [TEST_DATE_2], 'Liste triée par date');
+      return 'remplacement, déplacement, refus, suppression annulable';
+    }
+  },
+  {
+    name: 'Courbe : moyenne mobile sur 7 jours, périodes, statistiques',
+    async run() {
+      const w = (date, weightKg) => ({ date, weightKg });
+      const list = [w('2026-01-01', 80), w('2026-01-03', 79), w('2026-01-07', 78), w('2026-01-08', 77), w('2026-01-20', 76)];
+      const avg = movingAverage(list);
+      assert(approx(avg[2].value, 79) && avg[2].count === 3, 'Le 7 janvier : moyenne du 1er au 7 = 79 kg (3 pesées)');
+      assert(approx(avg[3].value, 78) && avg[3].count === 3, 'Le 8 janvier : le 1er sort de la fenêtre → (79+78+77)/3 = 78');
+      assert(approx(avg[4].value, 76) && avg[4].count === 1, 'Pesée isolée : moyenne = pesée');
+      assertEq(monthsBefore('2026-03-31', 1), '2026-02-28', '31 mars − 1 mois = 28 février');
+      assertEq(monthsBefore('2024-03-31', 1), '2024-02-29', 'Année bissextile');
+      assertEq(periodStart('1y', '2026-10-25'), '2025-10-25', 'Période 1 an');
+      assertEq(periodStart('all', '2026-10-25'), null, 'Période « Tout »');
+      const st = weightStats(list);
+      assert(approx(st.change, -4) && st.min.weightKg === 76 && st.max.weightKg === 80 && st.count === 5, 'Évolution −4 kg, min 76, max 80');
+      assertEq(weightStats([list[0]]).change, null, 'Une seule pesée : pas d\'évolution');
+      return 'fenêtre de 7 jours calendaires, mois courts, statistiques';
+    }
+  },
+  {
+    name: 'Rappel de pesée : échéances et fichier calendrier',
+    async run() {
+      const r = normalizeReminder({ enabled: true, day: 0, time: '10:00' });
+      const sat = new Date(2026, 9, 24, 18, 0); // samedi 24 octobre 2026
+      assertEq(localDateKey(lastOccurrence(r, sat)), '2026-10-18', 'Samedi : dernière échéance = dimanche précédent');
+      assertEq(localDateKey(nextOccurrence(r, sat)), '2026-10-25', 'Samedi : prochaine = demain');
+      const sun9 = new Date(2026, 9, 25, 9, 0);
+      const sun11 = new Date(2026, 9, 25, 11, 0);
+      assertEq(localDateKey(lastOccurrence(r, sun9)), '2026-10-18', 'Dimanche 9 h : pas encore l\'heure');
+      assertEq(localDateKey(lastOccurrence(r, sun11)), '2026-10-25', 'Dimanche 11 h : échéance du jour');
+      assert(reminderStatus(r, '2026-10-18', sun11).due, 'Dimanche 11 h sans pesée du jour : bannière');
+      assert(reminderStatus(r, '2026-10-18', sun11).isToday, 'Bannière « jour de la pesée »');
+      assert(!reminderStatus(r, '2026-10-25', sun11).due, 'Pesée saisie le jour même : pas de bannière');
+      assert(reminderStatus(r, '2026-10-27', new Date(2026, 9, 28, 8, 0)).due === false, 'Pesée faite mardi après l\'échéance : pas de bannière');
+      assert(!reminderStatus({ ...r, enabled: false }, null, sun11).due, 'Rappel désactivé : pas de bannière');
+      const ics = buildReminderIcs(r, { now: sat, timeZone: 'Europe/Paris', appUrl: 'https://exemple.test/#/weight' });
+      assert(ics.includes('RRULE:FREQ=WEEKLY;BYDAY=SU\r\n'), 'Récurrence chaque dimanche');
+      assert(ics.includes('BEGIN:VALARM') && ics.includes('TRIGGER:PT0M'), 'Alerte à l\'heure de l\'événement');
+      assert(/DTSTART(;TZID=Europe\/Paris)?:20261025T100000\r\n/.test(ics), 'Premier événement : dimanche 25 octobre 2026 à 10 h');
+      assert(ics.split('\r\n').every((l) => new TextEncoder().encode(l).length <= 75), 'Lignes de 75 octets au plus');
+      const tz = vtimezone('Europe/Paris', 2026);
+      if (tz) {
+        assert(tz.includes('TZOFFSETTO:+0200') && tz.includes('TZOFFSETTO:+0100'), 'Heure d\'été et d\'hiver de Paris');
+        assert(ics.includes('TZID:Europe/Paris'), 'Fuseau inclus dans le fichier');
+      }
+      const tzLocal = vtimezone(Intl.DateTimeFormat().resolvedOptions().timeZone, 2026);
+      return `fuseau de l'iPhone : ${Intl.DateTimeFormat().resolvedOptions().timeZone} (${tzLocal ? 'défini dans le fichier' : 'heure locale flottante'})`;
     }
   },
   {

@@ -19,6 +19,7 @@ export const BACKUP_STORES = Object.freeze([
 // Réglages propres à cet appareil (diagnostic, date de sauvegarde, table Ciqual) ou secrets (clé API) : jamais exportés.
 const SETTINGS_EXCLUDED = new Set(['schemaVersion', 'firstLaunchAt', 'lastLaunchAt', 'launchCount', 'lastBackupAt', 'visionApiKey', 'ciqualVersion', 'ciqualMeta']);
 const IMPORTABLE_SETTINGS = Object.freeze(Object.keys(SETTING_DEFAULTS).filter((k) => !SETTINGS_EXCLUDED.has(k)));
+const WEIGH_KEYS = Object.freeze(['weighReminder', 'weighDay', 'weighTime']);
 
 export class BackupError extends Error {
   constructor(message) {
@@ -168,6 +169,11 @@ const VALIDATORS = {
     const ok = v === null || ['string', 'number', 'boolean'].includes(typeof v);
     if (!ok) throw new Error(`réglage « ${rec.key} » invalide.`);
     if (rec.key === 'theme' && !THEMES.includes(v)) throw new Error(`thème inconnu « ${v} ».`);
+    // Rappel de pesée (Phase 5) : une valeur vide d'une ancienne sauvegarde garde le réglage par défaut.
+    if (WEIGH_KEYS.includes(rec.key) && v === null) return null;
+    if (rec.key === 'weighReminder' && typeof v !== 'boolean') throw new Error('rappel de pesée invalide.');
+    if (rec.key === 'weighDay' && !(Number.isInteger(v) && v >= 0 && v <= 6)) throw new Error(`jour de pesée invalide « ${v} ».`);
+    if (rec.key === 'weighTime' && !(typeof v === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(v))) throw new Error(`heure de pesée invalide « ${v} ».`);
     return { key: rec.key, value: v };
   }
 };
