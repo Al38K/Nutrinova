@@ -47,6 +47,21 @@ export function formatDayLong(key) {
   return capitalize(longFormatter.format(parseDateKey(key)));
 }
 
+/** « Aujourd'hui », « Hier », « Demain », sinon « Dimanche 25 octobre ». */
+export function dayTitle(key, today = localDateKey()) {
+  if (key === today) return 'Aujourd\'hui';
+  if (key === addDays(today, -1)) return 'Hier';
+  if (key === addDays(today, 1)) return 'Demain';
+  return formatDayLong(key);
+}
+
+/** Nombre de jours entiers écoulés depuis un horodatage ISO ; null si invalide. */
+export function daysSince(iso, now = Date.now()) {
+  const t = Date.parse(iso || '');
+  if (Number.isNaN(t)) return null;
+  return Math.floor((now - t) / 86400000);
+}
+
 /** « 25 oct. 2026 » */
 export function formatDayShort(key) {
   return shortFormatter.format(parseDateKey(key));

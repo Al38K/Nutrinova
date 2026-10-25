@@ -27,6 +27,15 @@ export function h(tag, attrs = {}, ...children) {
   return el;
 }
 
+/**
+ * Ajoute des enfants à un élément existant. Les valeurs null/false sont ignorées et les tableaux aplatis
+ * (contrairement à element.append, qui afficherait le texte « null »).
+ */
+export function mount(el, ...children) {
+  append(el, children);
+  return el;
+}
+
 function append(el, children) {
   for (const c of children.flat(Infinity)) {
     if (c === null || c === undefined || c === false) continue;
@@ -206,27 +215,41 @@ export function ring({ value, goal, centerNumber, centerLabel, size = 168, strok
   );
 }
 
-/** Barre de macro : kind = 'protein' | 'carbs' | 'fat'. Valeurs en g ; null → « — ». */
-export function macroBar({ kind, label, value, goal }) {
+/**
+ * Barre de macro : kind = 'protein' | 'carbs' | 'fat'. Valeurs en g ; null → « — ».
+ * caption : texte facultatif sous la barre (ex. « 58 g restants »).
+ */
+export function macroBar({ kind, label, value, goal, caption }) {
   const ratio = isNum(value) && isNum(goal) && goal > 0 ? value / goal : 0;
   const fill = h('div', { class: 'bar-fill' });
   fill.style.width = `${Math.min(ratio, 1) * 100}%`;
-  const valueText = `${formatNumber(value, 0)} / ${formatNumber(goal, 0)} g`;
+  const valueText = isNum(goal)
+    ? `${formatNumber(value, 0)} / ${formatNumber(goal, 0)} g`
+    : (isNum(value) ? `${formatNumber(value, 0)} g` : '—');
   return h('div', { class: `macro macro-${kind} ${ratio > 1 ? 'is-over' : ''}` },
     h('div', { class: 'macro-head' },
       h('span', { class: 'macro-name' }, label),
       h('span', { class: 'macro-value' }, valueText)
     ),
-    h('div', { class: 'bar', role: 'progressbar', 'aria-label': label, 'aria-valuemin': '0', 'aria-valuemax': String(isNum(goal) ? goal : 0), 'aria-valuenow': String(isNum(value) ? value : 0) }, fill)
+    h('div', { class: 'bar', role: 'progressbar', 'aria-label': label, 'aria-valuemin': '0', 'aria-valuemax': String(isNum(goal) ? Math.round(goal) : 0), 'aria-valuenow': String(isNum(value) ? Math.round(value) : 0) }, fill),
+    caption ? h('p', { class: 'macro-caption' }, caption) : null
   );
 }
 
 // ---------- Toasts ----------
 
-/** Message temporaire en bas d'écran. action : { label, onClick }. duration 0 = reste affiché. */
+/**
+ * Message temporaire en bas d'écran. action : { label, onClick }. duration 0 = reste affiché.
+ * Un nouveau message remplace les messages temporaires précédents (un seul « Annuler » visible à la fois) ;
+ * les messages permanents (ex. « Nouvelle version disponible ») restent.
+ */
 export function toast(message, { action, duration = 3000 } = {}) {
   const host = document.getElementById('toast-host');
-  const el = h('div', { class: 'toast', role: 'status' }, h('span', { class: 'toast-text' }, message));
+  for (const old of host.querySelectorAll('.toast[data-transient]:not(.is-leaving)')) {
+    old.classList.add('is-leaving');
+    setTimeout(() => old.remove(), 260);
+  }
+  const el = h('div', { class: 'toast', role: 'status', 'data-transient': duration > 0 ? '' : null }, h('span', { class: 'toast-text' }, message));
   const dismiss = () => {
     el.classList.add('is-leaving');
     setTimeout(() => el.remove(), 260);
@@ -243,17 +266,20 @@ export function toast(message, { action, duration = 3000 } = {}) {
 
 /**
  * Feuille modale en bas d'écran (élément <dialog>, Safari 15.4+).
- * content : élément ou fonction(close) → élément. Renvoie { close }.
+ * content : élément ou fonction(close) → élément. Renvoie { close, dialog }.
+ * closeLabel : texte du bouton de fermeture (« OK » à droite ; tout autre texte, ex. « Annuler », à gauche).
  */
-export function openSheet({ title, content, onClose }) {
+export function openSheet({ title, content, onClose, closeLabel = 'OK' }) {
   const dialog = h('dialog', { class: 'sheet', 'aria-label': title });
-  const close = () => dialog.close();
+  const close = () => { if (dialog.open) dialog.close(); };
+  const closeBtn = h('button', { type: 'button', class: 'btn btn-plain', onclick: close }, closeLabel);
+  const onRight = closeLabel === 'OK';
   dialog.append(
     h('div', { class: 'sheet-grabber', 'aria-hidden': 'true' }),
     h('div', { class: 'sheet-head' },
-      h('span'),
+      onRight ? h('span') : closeBtn,
       h('h2', { class: 'sheet-title' }, title),
-      h('button', { type: 'button', class: 'btn btn-plain', onclick: close }, 'OK')
+      onRight ? closeBtn : h('span')
     ),
     h('div', { class: 'sheet-body' }, typeof content === 'function' ? content(close) : content)
   );
@@ -261,7 +287,67 @@ export function openSheet({ title, content, onClose }) {
   dialog.addEventListener('close', () => { dialog.remove(); if (onClose) onClose(); });
   document.body.append(dialog);
   dialog.showModal();
-  return { close };
+  return { close, dialog };
+}
+
+/** Demande de confirmation. Renvoie une Promise<boolean> (false si fermée sans confirmer). */
+export function confirmDialog({ title, text, confirmLabel = 'Confirmer', destructive = false }) {
+  return new Promise((resolve) => {
+    let answered = false;
+    openSheet({
+      title,
+      closeLabel: 'Annuler',
+      onClose: () => { if (!answered) resolve(false); },
+      content: (close) => h('div', { class: 'stack' },
+        text ? h('p', { class: 't-subhead' }, text) : null,
+        h('button', {
+          type: 'button',
+          class: `btn btn-lg btn-block ${destructive ? 'btn-destructive' : 'btn-primary'}`,
+          onclick: () => { answered = true; resolve(true); close(); }
+        }, confirmLabel)
+      )
+    });
+  });
+}
+
+/**
+ * Champ de saisie avec message d'erreur modifiable après coup.
+ * Renvoie { root, input, setError(message|null), setSuffix(texte) }.
+ */
+export function fieldControl({ label, id, value = '', placeholder, suffix, inputmode, type = 'text', onInput, autofocus = false, maxlength, enterkeyhint = 'done' }) {
+  const input = h('input', {
+    class: 'input',
+    id,
+    type,
+    value,
+    placeholder,
+    inputmode,
+    maxlength,
+    autocomplete: 'off',
+    enterkeyhint,
+    autofocus: autofocus || null,
+    oninput: onInput ? (e) => onInput(e.target.value, e) : null
+  });
+  const suffixEl = suffix !== undefined ? h('span', { class: 'input-suffix' }, suffix) : null;
+  const wrap = h('span', { class: 'input-wrap' }, input, suffixEl);
+  const error = h('span', { class: 'field-error', hidden: true, 'aria-live': 'polite' });
+  const root = h('label', { class: 'field', for: id },
+    h('span', { class: 'field-label' }, label),
+    wrap,
+    error
+  );
+  return {
+    root,
+    input,
+    setError(message) {
+      wrap.classList.toggle('is-invalid', Boolean(message));
+      error.textContent = message || '';
+      error.hidden = !message;
+    },
+    setSuffix(text) {
+      if (suffixEl) suffixEl.textContent = text;
+    }
+  };
 }
 
 /** Rappel d'installation, affiché tant que l'app est ouverte dans un onglet Safari. */

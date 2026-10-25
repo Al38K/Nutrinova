@@ -2,7 +2,7 @@
  * À CHAQUE LIVRAISON : la valeur VERSION doit être identique à APP_VERSION dans js/config.js.
  * Changer VERSION déclenche la mise à jour de l'app sur l'iPhone.
  */
-const VERSION = '1.0.0';
+const VERSION = '1.1.0';
 const CACHE_PREFIX = 'nutrinova-';
 const CACHE_NAME = CACHE_PREFIX + VERSION;
 
@@ -14,6 +14,7 @@ const APP_FILES = [
   './css/tokens.css',
   './css/base.css',
   './css/components.css',
+  './css/views.css',
   './js/config.js',
   './js/app.js',
   './js/router.js',
@@ -30,12 +31,25 @@ const APP_FILES = [
   './js/data/settings.js',
   './js/data/storage.js',
   './js/data/selftest.js',
+  './js/data/entries.js',
+  './js/data/goals.js',
+  './js/data/foods.js',
+  './js/data/backup.js',
+  './js/components/journal-parts.js',
+  './js/components/energy-split.js',
+  './js/sheets/entry-sheet.js',
+  './js/sheets/food-form.js',
+  './js/sheets/food-picker.js',
+  './js/sheets/backup-sheets.js',
   './js/views/journal.js',
   './js/views/foods.js',
   './js/views/recipes.js',
   './js/views/weight.js',
   './js/views/settings.js',
   './js/views/design.js',
+  './js/views/meal.js',
+  './js/views/day.js',
+  './js/views/goals.js',
   './icons/icon.svg',
   './icons/apple-touch-icon.png',
   './icons/icon-192.png',

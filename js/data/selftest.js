@@ -1,24 +1,31 @@
-// Autotest du socle, lancé depuis Réglages. Vérifie sur l'iPhone lui-même :
-// structure de la base, écritures/relectures, index, transactions, calculs et validations.
-// Les enregistrements de test sont datés 1900-01-01 et supprimés à la fin, même en cas d'échec.
+// Autotest, lancé depuis Réglages. Vérifie sur l'iPhone lui-même :
+// structure de la base, écritures/relectures, index, transactions, calculs, validations,
+// journal (ajout, modification, suppression), objectifs versionnés et contrôle des sauvegardes.
+// Les enregistrements de test sont datés de janvier 1900 et supprimés à la fin, même en cas d'échec.
 
 import * as db from './db.js';
 import { SCHEMA, SCHEMA_VERSION, STORES } from './schema.js';
 import { createFood, createJournalEntry, createRecipe, createGoal, createWeight, createCiqualItem, ValidationError } from './model.js';
 import { scaleNutrients, sumNutrients, checkEnergyCoherence, normalizeNutrients, NutrientError } from './nutrients.js';
 import { getSetting, THEMES } from './settings.js';
+import { addEntry, updateEntry, deleteEntry, restoreEntry, computeTotals, resolveQuantity } from './entries.js';
+import { getGoalForDate, saveGoal, goalTargets, goalWarnings } from './goals.js';
+import { buildBackup, validateBackup, BackupError, BACKUP_FORMAT, BACKUP_FORMAT_VERSION } from './backup.js';
 import { localDateKey, isDateKey, addDays } from '../util/dates.js';
 import { normalizeName } from '../util/text.js';
 import { parseDecimal, formatNutrient, formatGrams } from '../util/format.js';
 import { APP_VERSION } from '../config.js';
 
 const TEST_DATE = '1900-01-01';
+const TEST_DATE_2 = '1900-01-10';
 const TEST_IDS = {
   food: 'selftest-food',
   food2: 'selftest-food-rollback',
   entry: 'selftest-entry',
+  entry2: 'selftest-entry-2',
   recipe: 'selftest-recipe',
   goal: 'selftest-goal',
+  goal2: 'selftest-goal-2',
   ciqual: 'SELFTEST'
 };
 
@@ -49,8 +56,10 @@ async function cleanup() {
     tx.objectStore(STORES.foods).delete(TEST_IDS.food);
     tx.objectStore(STORES.foods).delete(TEST_IDS.food2);
     tx.objectStore(STORES.journal).delete(TEST_IDS.entry);
+    tx.objectStore(STORES.journal).delete(TEST_IDS.entry2);
     tx.objectStore(STORES.recipes).delete(TEST_IDS.recipe);
     tx.objectStore(STORES.goals).delete(TEST_IDS.goal);
+    tx.objectStore(STORES.goals).delete(TEST_IDS.goal2);
     tx.objectStore(STORES.weights).delete(TEST_DATE);
     tx.objectStore(STORES.ciqual).delete(TEST_IDS.ciqual);
   });
@@ -224,6 +233,94 @@ const TESTS = [
       assert(!isDateKey('2026-02-30'), '30 février refusé');
       assertEq(normalizeName('Crème brûlée — Œuf'), 'creme brulee oeuf', 'Normalisation');
       return `aujourd'hui = ${localDateKey()}`;
+    }
+  },
+  {
+    name: 'Journal : ajout, modification, suppression, annulation',
+    async run() {
+      const food = testFood();
+      await db.put(STORES.foods, food);
+      const added = await addEntry({ id: TEST_IDS.entry2, date: TEST_DATE, meal: 'lunch', food, quantity: 200, inputUnit: 'g', inputValue: 200 });
+      const usedFood = await db.get(STORES.foods, TEST_IDS.food);
+      assert(usedFood.useCount >= 1 && usedFood.lastUsedAt === added.createdAt, 'Historique d\'usage de l\'aliment mis à jour');
+      const moved = await updateEntry(added, { meal: 'dinner', quantity: 50, inputValue: 50 });
+      const back = await db.get(STORES.journal, TEST_IDS.entry2);
+      assertEq([back.meal, back.quantity], ['dinner', 50], 'Repas et quantité modifiés');
+      assertEq(back.per100Snapshot.protein, 10, 'Instantané conservé après modification');
+      assertEq(back.createdAt, added.createdAt, 'Date de création conservée');
+      const removed = await deleteEntry(TEST_IDS.entry2);
+      assert(removed && removed.id === moved.id, 'Entrée supprimée renvoyée pour annulation');
+      assert((await db.get(STORES.journal, TEST_IDS.entry2)) === undefined, 'Entrée bien supprimée');
+      await restoreEntry(removed);
+      assert(await db.get(STORES.journal, TEST_IDS.entry2), 'Annulation de la suppression');
+      assertEq(resolveQuantity({ servingSize: 125 }, 'portion', 2), 250, '2 portions de 125 g');
+      assert(Number.isNaN(resolveQuantity({ servingSize: null }, 'portion', 1)), 'Portion inconnue refusée');
+      return 'ajout, déplacement vers le Dîner, suppression puis annulation';
+    }
+  },
+  {
+    name: 'Totaux du jour et des repas (valeurs manquantes)',
+    async run() {
+      const nul = { fiber: null, sugars: null, salt: null, alcohol: null };
+      const totals = computeTotals([
+        { meal: 'breakfast', quantity: 200, per100Snapshot: { kcal: 50, protein: 3, carbs: 5, fat: 1, ...nul } },
+        { meal: 'breakfast', quantity: 50, per100Snapshot: { kcal: null, protein: 10, carbs: null, fat: null, ...nul } },
+        { meal: 'dinner', quantity: 100, per100Snapshot: { kcal: 200, protein: 20, carbs: 0, fat: 12, ...nul } }
+      ]);
+      const bf = totals.meals.breakfast;
+      assert(approx(bf.values.kcal, 100), `Petit-déjeuner : 200 g à 50 kcal = 100 kcal (obtenu ${bf.values.kcal})`);
+      assert(approx(bf.values.protein, 11), 'Protéines du petit-déjeuner = 6 + 5 g');
+      assert(bf.incomplete.has('kcal') && bf.missing.kcal === 1, 'Total kcal signalé partiel (1 entrée sans kcal)');
+      assertEq(totals.meals.lunch.values.kcal, 0, 'Repas vide = 0, pas une valeur manquante');
+      assert(totals.meals.lunch.incomplete.size === 0, 'Repas vide non signalé partiel');
+      assert(approx(totals.day.values.kcal, 300), 'Total du jour = 300 kcal');
+      assertEq(totals.day.count, 3, 'Nombre d\'entrées du jour');
+      assertEq(totals.day.values.fiber, null, 'Fibres toutes inconnues → inconnues');
+      return 'somme par repas et par jour, totaux partiels signalés';
+    }
+  },
+  {
+    name: 'Objectifs : version en vigueur à une date, % → grammes',
+    async run() {
+      // Objectif v1 au 1900-01-01 (créé par le test 4) : 2000 kcal, 25/50/25 %.
+      const g1 = await getGoalForDate('1900-01-05');
+      assert(g1 && g1.id === TEST_IDS.goal, 'Objectif du 1900-01-01 en vigueur le 1900-01-05');
+      await saveGoal({ id: TEST_IDS.goal2, effectiveFrom: TEST_DATE_2, kcal: 1800, mode: 'grams', protein: 120, carbs: 180, fat: 60 });
+      assertEq((await getGoalForDate(TEST_DATE_2)).id, TEST_IDS.goal2, 'Nouvel objectif en vigueur à sa date');
+      assertEq((await getGoalForDate('1900-01-09')).id, TEST_IDS.goal, 'La veille garde l\'ancien objectif');
+      const again = await saveGoal({ effectiveFrom: TEST_DATE_2, kcal: 1900, mode: 'grams', protein: 120, carbs: 180, fat: 60 });
+      assertEq(again.id, TEST_IDS.goal2, 'Même date d\'effet → objectif remplacé, pas dupliqué');
+      const t = goalTargets(g1);
+      assert(approx(t.protein, 125) && approx(t.carbs, 250) && approx(t.fat, 500 / 9), `25/50/25 % de 2000 kcal = 125/250/55,6 g (obtenu ${t.protein}/${t.carbs}/${t.fat})`);
+      assert(goalWarnings({ kcal: 1000, mode: 'grams' }).some((w) => w.code === 'low-kcal'), 'Alerte objectif très bas');
+      assert(!goalWarnings({ kcal: 2000, mode: 'grams' }).some((w) => w.code === 'low-kcal'), 'Pas d\'alerte à 2000 kcal');
+      return 'historique respecté, conversion % → g exacte';
+    }
+  },
+  {
+    name: 'Sauvegarde : contrôle des fichiers et export de vos données',
+    async run() {
+      const sample = {
+        format: BACKUP_FORMAT,
+        formatVersion: BACKUP_FORMAT_VERSION,
+        schemaVersion: SCHEMA_VERSION,
+        data: {
+          foods: [testFood()],
+          journal: [createJournalEntry({ id: 'x', date: TEST_DATE, meal: 'snack', food: testFood(), quantity: 30 })],
+          goals: [createGoal({ id: 'g', effectiveFrom: TEST_DATE, kcal: 2000 })],
+          settings: [{ key: 'theme', value: 'dark' }, { key: 'launchCount', value: 99 }]
+        }
+      };
+      const ok = validateBackup(sample);
+      assertEq([ok.counts.foods, ok.counts.journal, ok.counts.goals, ok.counts.settings], [1, 1, 1, 1], 'Contenu reconnu (réglage d\'appareil ignoré)');
+      expectThrow(() => validateBackup({ ...sample, format: 'autre' }), BackupError, 'Fichier étranger refusé');
+      expectThrow(() => validateBackup({ ...sample, schemaVersion: SCHEMA_VERSION + 1 }), BackupError, 'Version future refusée');
+      const bad = { ...sample.data.journal[0], quantity: -5 };
+      expectThrow(() => validateBackup({ ...sample, data: { ...sample.data, journal: [bad] } }), BackupError, 'Quantité négative refusée');
+      const built = await buildBackup();
+      const reread = validateBackup(JSON.parse(built.json));
+      assertEq(reread.counts.journal, built.counts.journal, 'Votre export actuel se relit sans perte');
+      return `export actuel valide (${built.counts.journal} entrées, ${built.counts.foods} aliments)`;
     }
   }
 ];

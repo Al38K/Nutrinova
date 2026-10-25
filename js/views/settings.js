@@ -1,14 +1,18 @@
-// Onglet Réglages : apparence, état du stockage, contenu de la base, autotest, à propos.
+// Onglet Réglages : objectifs, sauvegarde (export/import), apparence, état du stockage,
+// contenu de la base, autotest, à propos.
 
-import { h, setAppbar, section, row, segmented, installBanner, iconEl, toast } from '../ui.js';
+import { h, mount, setAppbar, section, row, segmented, installBanner, iconEl, toast } from '../ui.js';
 import { getAllSettings, setSetting, applyTheme } from '../data/settings.js';
 import { countAll } from '../data/db.js';
 import { STORES, STORE_LABELS, SCHEMA_VERSION } from '../data/schema.js';
 import { isStandalone, checkPersisted, estimateStorage } from '../data/storage.js';
 import { runSelfTest } from '../data/selftest.js';
+import { getGoalForDate, goalMacroSummary } from '../data/goals.js';
 import { getServiceWorkerVersion } from '../pwa.js';
-import { formatBytes, formatNumber } from '../util/format.js';
-import { formatDateTime } from '../util/dates.js';
+import { formatBytes, formatNumber, formatKcal } from '../util/format.js';
+import { formatDateTime, localDateKey, daysSince } from '../util/dates.js';
+import { openExportSheet, handleImportFile } from '../sheets/backup-sheets.js';
+import { refresh } from '../router.js';
 import { APP_VERSION } from '../config.js';
 
 const THEME_OPTIONS = [
@@ -67,12 +71,13 @@ export default {
   async render(root) {
     setAppbar({ title: 'Réglages' });
 
-    const [settings, persisted, estimate, counts, swVersion] = await Promise.all([
+    const [settings, persisted, estimate, counts, swVersion, goal] = await Promise.all([
       getAllSettings(),
       checkPersisted(),
       estimateStorage(),
       countAll(Object.values(STORES).filter((s) => s !== STORES.settings)),
-      getServiceWorkerVersion()
+      getServiceWorkerVersion(),
+      getGoalForDate(localDateKey())
     ]);
     const standalone = isStandalone();
     const test = selfTestCard();
@@ -114,13 +119,52 @@ export default {
       onclick: (e) => test.start(e.currentTarget)
     }, 'Lancer l\'autotest');
 
-    root.append(
+    const lastBackup = settings.lastBackupAt;
+    const since = daysSince(lastBackup);
+    const fileInput = h('input', {
+      type: 'file',
+      accept: '.json,application/json',
+      class: 'sr-only',
+      onchange: async (e) => {
+        const input = e.currentTarget;
+        const file = input.files && input.files[0];
+        try {
+          if (file) await handleImportFile(file, { onDone: refresh });
+        } finally {
+          input.value = '';
+        }
+      }
+    });
+
+    mount(root,
       installBanner(),
+      section({
+        header: 'Objectifs',
+        rows: [row({
+          title: 'Objectifs journaliers',
+          subtitle: goal ? goalMacroSummary(goal) : 'Calories et macros',
+          value: goal ? formatKcal(goal.kcal) : 'Non définis',
+          iconName: 'target',
+          href: '#/goals'
+        })]
+      }),
+      section({
+        header: 'Sauvegarde',
+        rows: [
+          row({
+            title: 'Dernière sauvegarde',
+            value: lastBackup ? `${formatDateTime(lastBackup)}${since !== null && since >= 1 ? ` (${formatNumber(since)} j)` : ''}` : 'Jamais'
+          }),
+          h('button', { type: 'button', class: 'row row-action', onclick: () => openExportSheet({ onDone: refresh }) }, 'Exporter mes données'),
+          h('label', { class: 'row row-action' }, 'Importer une sauvegarde', fileInput)
+        ],
+        footer: 'L\'export crée un fichier JSON avec le journal, les aliments, les recettes, les objectifs, les pesées et les réglages. Enregistrez-le dans Fichiers (iCloud Drive). Un rappel s\'affiche dans le Journal après 7 jours sans sauvegarde.'
+      }),
       appearance,
       section({
         header: 'Stockage sur cet iPhone',
         rows: storageRows,
-        footer: 'Vos données restent sur cet iPhone et sont liées à l\'adresse de l\'app. Supprimer l\'icône efface les données : la sauvegarde (export) arrive en Phase 7.'
+        footer: 'Vos données restent sur cet iPhone et sont liées à l\'adresse de l\'app. Supprimer l\'icône efface les données : exportez-les régulièrement.'
       }),
       section({ header: `Contenu de la base (schéma v${SCHEMA_VERSION})`, rows: dbRows }),
       section({

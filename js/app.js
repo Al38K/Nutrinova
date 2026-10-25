@@ -13,6 +13,9 @@ import recipes from './views/recipes.js';
 import weight from './views/weight.js';
 import settings from './views/settings.js';
 import design from './views/design.js';
+import meal from './views/meal.js';
+import day from './views/day.js';
+import goals from './views/goals.js';
 
 const TABS = [
   { id: 'journal', label: 'Journal', icon: 'journal' },
@@ -22,7 +25,7 @@ const TABS = [
   { id: 'settings', label: 'Réglages', icon: 'settings' }
 ];
 
-const VIEWS = { journal, foods, recipes, weight, settings, design };
+const VIEWS = { journal, foods, recipes, weight, settings, design, meal, day, goals };
 
 async function boot() {
   // Le service worker s'enregistre même si la base échoue : l'app reste mise à jour.

@@ -1,0 +1,229 @@
+/* nutrinova — écrans Journal, Repas, Jour, Objectifs et feuilles de saisie (Phase 2). */
+
+/* ---------- Utilitaires ---------- */
+.text-warning { color: var(--warning); }
+.text-danger { color: var(--danger); }
+.macro-caption { margin-top: 4px; font-size: var(--fs-footnote); color: var(--label-2); }
+.macro.is-over .macro-caption { color: var(--warning); }
+.partial-note { color: var(--warning); }
+label.row { cursor: pointer; }
+label.row:active { background: var(--surface-pressed); }
+.row-sub .row-title { padding-left: var(--sp-4); color: var(--label-2); }
+.chip-inline { margin-left: var(--sp-2); vertical-align: 1px; min-height: 20px; padding: 0 8px; font-size: var(--fs-caption); }
+
+/* ---------- Navigation entre les jours ---------- */
+.daynav {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  padding: 0 var(--sp-1);
+  border-radius: var(--radius-m);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+}
+.daynav-btn {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: var(--touch);
+  height: var(--touch);
+  border-radius: var(--radius-s);
+  color: var(--brand);
+}
+.daynav-btn svg { width: 20px; height: 20px; }
+.daynav-btn:active { background: var(--surface-pressed); }
+.daynav-center {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: var(--touch);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-weight: var(--fw-semibold);
+}
+.daynav-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.daynav-cal { flex: none; width: 18px; height: 18px; color: var(--label-2); }
+/* Sélecteur de date natif, invisible, posé sur le libellé : le toucher ouvre le calendrier d'iOS. */
+.daynav-picker {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  font-size: 16px;
+  -webkit-appearance: none;
+  appearance: none;
+  cursor: pointer;
+}
+
+/* ---------- Bandeau calorique ---------- */
+.hero {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-5) var(--sp-3);
+  border-radius: var(--radius-xl);
+  background: var(--header-bg);
+  color: var(--header-fg);
+  box-shadow: var(--shadow-card);
+  -webkit-user-select: none;
+  user-select: none;
+}
+.hero:active { opacity: 0.92; }
+.hero-stat { display: flex; flex-direction: column; align-items: center; gap: 2px; text-align: center; min-width: 0; }
+.hero-num {
+  font-family: var(--font-rounded);
+  font-size: var(--fs-title-3);
+  font-weight: var(--fw-bold);
+  font-variant-numeric: tabular-nums;
+}
+.hero-lbl { font-size: var(--fs-footnote); color: var(--header-fg-muted); }
+.ring-on-brand .ring-number { color: var(--header-fg); }
+.ring-on-brand.is-over .ring-value { stroke: #FFD27A; }
+
+/* ---------- Cartes repas ---------- */
+.meal-card { padding: 0; overflow: hidden; }
+.meal-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-3) var(--sp-3) var(--sp-4);
+}
+.meal-title-link { flex: 1; min-width: 0; display: flex; flex-direction: column; color: var(--label); }
+.meal-title-link:active { opacity: 0.6; }
+.meal-title { display: flex; align-items: center; gap: 2px; font-size: var(--fs-headline); font-weight: var(--fw-semibold); }
+.meal-chevron { width: 14px; height: 14px; color: var(--label-3); }
+.meal-sub { font-size: var(--fs-footnote); color: var(--label-2); }
+.meal-kcal { flex: none; font-weight: var(--fw-semibold); font-variant-numeric: tabular-nums; }
+.meal-add { flex: none; }
+.meal-entries { border-top: 0.5px solid var(--separator); }
+
+/* ---------- Lignes d'entrée du journal ---------- */
+.entry-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  width: 100%;
+  min-height: var(--touch);
+  padding: 10px var(--sp-4);
+  border: 0;
+  background: transparent;
+  color: var(--label);
+  text-align: left;
+}
+.entry-row + .entry-row::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: var(--sp-4);
+  right: 0;
+  border-top: 0.5px solid var(--separator);
+}
+.entry-row:active { background: var(--surface-pressed); }
+.entry-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.entry-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.entry-sub { font-size: var(--fs-footnote); color: var(--label-2); }
+.entry-kcal { flex: none; font-size: var(--fs-subhead); color: var(--label-2); font-variant-numeric: tabular-nums; }
+
+/* ---------- Listes de choix (aliments, historique des objectifs) ---------- */
+.pick-list {
+  background: var(--surface);
+  border-radius: var(--radius-m);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+}
+.pick-row { position: relative; display: flex; align-items: center; }
+.pick-row + .pick-row::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: var(--sp-4);
+  right: 0;
+  border-top: 0.5px solid var(--separator);
+}
+.pick-main {
+  flex: 1;
+  min-width: 0;
+  min-height: 52px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 8px var(--sp-4);
+  border: 0;
+  background: transparent;
+  color: var(--label);
+  text-align: left;
+}
+.pick-main:active { background: var(--surface-pressed); }
+.pick-name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pick-sub { font-size: var(--fs-footnote); color: var(--label-2); }
+.pick-side { flex: none; margin-right: var(--sp-2); }
+
+/* ---------- Feuilles de saisie ---------- */
+.entry-preview {
+  padding: var(--sp-3);
+  border-radius: var(--radius-m);
+  background: var(--surface);
+  text-align: center;
+}
+.entry-preview-kcal { font-family: var(--font-rounded); font-size: var(--fs-title-1); font-weight: var(--fw-bold); line-height: 1.1; }
+.entry-preview .cluster { justify-content: center; margin-top: var(--sp-2); }
+.segmented-sm button { font-size: var(--fs-footnote); padding: 0 2px; }
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-3); }
+.form-grid-3 { grid-template-columns: 1fr 1fr 1fr; }
+/* Les champs se resserrent dans leur colonne au lieu d'élargir la page. */
+.form-grid > * { min-width: 0; }
+.input-wrap { min-width: 0; }
+.input-wrap .input { width: 100%; }
+.form-section { padding-left: 0; margin-bottom: calc(-1 * var(--sp-2)); }
+
+/* ---------- Chiffre principal ---------- */
+.big-stat { display: flex; align-items: baseline; flex-wrap: wrap; gap: var(--sp-2); }
+.big-stat-num { font-family: var(--font-rounded); font-size: var(--fs-large-title); font-weight: var(--fw-bold); line-height: 1; }
+.big-stat-unit { color: var(--label-2); font-weight: var(--fw-semibold); }
+.big-stat .chip { margin-left: auto; align-self: center; }
+
+/* ---------- Répartition de l'énergie ---------- */
+.split {
+  display: flex;
+  height: 12px;
+  border-radius: var(--radius-pill);
+  background: var(--track);
+  overflow: hidden;
+}
+.split > span { height: 100%; }
+.split-protein { background: var(--protein); }
+.split-carbs { background: var(--carbs); }
+.split-fat { background: var(--fat); }
+.split-legend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--sp-1) var(--sp-3);
+  margin-top: var(--sp-2);
+  font-size: var(--fs-footnote);
+}
+.dot { display: inline-block; width: 8px; height: 8px; margin-right: 5px; border-radius: 50%; vertical-align: 1px; }
+
+/* ---------- Tableaux nutritionnels ---------- */
+.ntable { width: 100%; border-collapse: collapse; font-size: var(--fs-subhead); font-variant-numeric: tabular-nums; }
+.ntable th, .ntable td { padding: 9px 4px; border-top: 0.5px solid var(--separator); text-align: right; font-weight: var(--fw-regular); }
+.ntable th:first-child { padding-left: 0; text-align: left; }
+.ntable td:last-child, .ntable th:last-child { padding-right: 0; }
+.ntable thead th { border-top: 0; padding-top: 0; font-size: var(--fs-footnote); font-weight: var(--fw-medium); color: var(--label-2); }
+.ntable tbody tr:first-child th, .ntable tbody tr:first-child td { border-top: 0; }
+.ntable thead + tbody tr:first-child th, .ntable thead + tbody tr:first-child td { border-top: 0.5px solid var(--separator); }
+.ntable .is-over { color: var(--warning); font-weight: var(--fw-semibold); }
+.ntable-compact { font-size: var(--fs-footnote); }
+.ntable a { color: var(--brand); }
+
+/* Kv en carte (sauvegarde) */
+.kv.card { padding: var(--sp-3) var(--sp-4); }

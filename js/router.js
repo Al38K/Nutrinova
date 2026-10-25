@@ -1,10 +1,12 @@
-// Navigation par onglets basée sur l'ancre de l'adresse (#/journal, #/foods…).
+// Navigation basée sur l'ancre de l'adresse (#/journal, #/journal/2026-10-25, #/meal/2026-10-25/lunch…).
 // Fonctionne sur GitHub Pages sans configuration serveur et hors ligne.
+// Le nouvel écran est construit hors de la page puis affiché d'un coup : pas de clignotement
+// lors d'un rafraîchissement après un ajout, une modification ou une suppression.
 
 import { h, iconEl, renderFatal } from './ui.js';
 
 let config = null;
-let current = { route: null, cleanup: null };
+let current = { route: null, key: null, cleanup: null };
 let renderToken = 0;
 const scrollMemory = new Map();
 
@@ -20,9 +22,12 @@ export function href(route) {
 
 export function navigate(route, { replace = false } = {}) {
   const target = href(route);
-  if (replace) history.replaceState(null, '', target);
-  else location.hash = target;
-  if (replace) render();
+  if (replace) {
+    history.replaceState(null, '', target);
+    render();
+  } else {
+    location.hash = target;
+  }
 }
 
 function renderTabbar(activeTab) {
@@ -34,8 +39,9 @@ function renderTabbar(activeTab) {
         href: href(tab.id),
         dataset: { tab: tab.id },
         onclick: (e) => {
-          // Toucher l'onglet déjà ouvert remonte en haut de la page (comportement iOS).
-          if (tab.id === current.route) {
+          // Toucher l'onglet déjà affiché remonte en haut de la page (comportement iOS).
+          // Depuis un autre jour du journal, l'onglet Journal ramène à aujourd'hui.
+          if (location.hash === href(tab.id)) {
             e.preventDefault();
             window.scrollTo({ top: 0, behavior: 'smooth' });
           }
@@ -57,38 +63,39 @@ async function render() {
     return;
   }
   const token = ++renderToken;
-
-  if (current.route) scrollMemory.set(current.route, window.scrollY);
-  if (typeof current.cleanup === 'function') {
-    try { current.cleanup(); } catch { /* sans conséquence */ }
-  }
-  current = { route, cleanup: null };
+  const key = location.hash || href(route);
+  if (current.key) scrollMemory.set(current.key, window.scrollY);
 
   renderTabbar(view.tab || route);
-  const container = document.getElementById('view');
   const fresh = document.createElement('main');
   fresh.id = 'view';
   fresh.className = 'view';
   fresh.tabIndex = -1;
-  container.replaceWith(fresh);
 
+  let cleanup = null;
   try {
-    const cleanup = await view.render(fresh, { params, navigate });
-    if (token !== renderToken) {
-      if (typeof cleanup === 'function') cleanup();
-      return;
-    }
-    current.cleanup = cleanup || null;
+    cleanup = await view.render(fresh, { params, navigate });
   } catch (err) {
     if (token !== renderToken) return;
     console.error(err);
     renderFatal(fresh, 'Cet écran n\'a pas pu s\'afficher', err);
   }
-  window.scrollTo(0, scrollMemory.get(route) || 0);
+  if (token !== renderToken) {
+    // Un autre écran a été demandé entre-temps : celui-ci est abandonné.
+    if (typeof cleanup === 'function') cleanup();
+    return;
+  }
+  if (typeof current.cleanup === 'function') {
+    try { current.cleanup(); } catch { /* sans conséquence */ }
+  }
+  current = { route, key, cleanup: typeof cleanup === 'function' ? cleanup : null };
+  document.getElementById('view').replaceWith(fresh);
+  window.scrollTo(0, scrollMemory.get(key) || 0);
 }
 
-/** Rafraîchit l'écran courant (après une modification de données). */
+/** Réaffiche l'écran courant (après une modification de données), en gardant la position. */
 export function refresh() {
+  if (current.key) scrollMemory.set(current.key, window.scrollY);
   return render();
 }
 
