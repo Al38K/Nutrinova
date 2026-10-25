@@ -4,7 +4,7 @@
 
 import * as db from './db.js';
 import { STORES } from './schema.js';
-import { createJournalEntry, MEAL_IDS } from './model.js';
+import { createJournalEntry, createFood, MEAL_IDS } from './model.js';
 import { scaleNutrients, sumNutrients, emptyNutrients, NUTRIENT_KEYS } from './nutrients.js';
 import { isNum } from '../util/format.js';
 
@@ -47,6 +47,18 @@ export function resolveQuantity({ servingSize }, inputUnit, inputValue) {
   return inputValue;
 }
 
+/**
+ * Repas proposé selon l'heure (ajout depuis l'onglet Aliments) : avant 10 h 30 petit-déjeuner,
+ * avant 14 h 30 déjeuner, avant 18 h snack, ensuite dîner. Modifiable dans la feuille de saisie.
+ */
+export function suggestMeal(now = new Date()) {
+  const minutes = now.getHours() * 60 + now.getMinutes();
+  if (minutes < 630) return 'breakfast';
+  if (minutes < 870) return 'lunch';
+  if (minutes < 1080) return 'snack';
+  return 'dinner';
+}
+
 /** Quantité proposée par défaut : 1 portion si l'aliment en a une, sinon 100 g ou 100 ml. */
 export function defaultInput(food) {
   if (isNum(food.servingSize) && food.servingSize > 0) return { inputUnit: 'portion', inputValue: 1 };
@@ -56,22 +68,34 @@ export function defaultInput(food) {
 /**
  * Ajoute une entrée et met à jour l'historique d'usage de l'aliment (compteur, dernière utilisation),
  * dans une seule transaction : tout est écrit, ou rien.
+ * Un aliment pas encore enregistré (résultat Ciqual ou Open Food Facts) est enregistré au passage,
+ * une seule fois par source et référence.
  */
 export async function addEntry({ id, date, meal, food, quantity, inputUnit, inputValue }) {
-  const entry = createJournalEntry({ id, date, meal, food, quantity, inputUnit, inputValue });
-  await db.run([STORES.journal, STORES.foods], 'readwrite', async (tx) => {
-    tx.objectStore(STORES.journal).put(entry);
+  // Validation complète avant d'ouvrir la transaction (message clair en cas d'erreur de saisie).
+  createJournalEntry({ id, date, meal, food, quantity, inputUnit, inputValue });
+  return db.run([STORES.journal, STORES.foods], 'readwrite', async (tx) => {
     const foods = tx.objectStore(STORES.foods);
-    const current = await db.req(foods.get(food.id));
+    let current = await db.req(foods.get(food.id));
+    if (!current && food.source && food.source !== 'custom' && food.sourceRef) {
+      current = await db.req(foods.index('source_ref').get([food.source, String(food.sourceRef)]));
+    }
+    const entry = createJournalEntry({
+      id, date, meal, quantity, inputUnit, inputValue,
+      food: { ...food, id: current ? current.id : food.id }
+    });
+    tx.objectStore(STORES.journal).put(entry);
     if (current) {
       foods.put({
         ...current,
         useCount: (Number.isInteger(current.useCount) ? current.useCount : 0) + 1,
         lastUsedAt: entry.createdAt
       });
+    } else if (food.createdAt && food.nameNorm !== undefined) {
+      foods.put(createFood({ ...food, useCount: 1, lastUsedAt: entry.createdAt }));
     }
+    return entry;
   });
-  return entry;
 }
 
 /**

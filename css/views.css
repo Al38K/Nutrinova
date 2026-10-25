@@ -227,3 +227,160 @@ label.row:active { background: var(--surface-pressed); }
 
 /* Kv en carte (sauvegarde) */
 .kv.card { padding: var(--sp-3) var(--sp-4); }
+
+/* =====================================================================
+   Phase 3 — saisie des aliments : recherche, résultats, scan
+   ===================================================================== */
+
+/* ---------- Barre de recherche ---------- */
+.searchbar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-height: var(--touch);
+  padding: 0 4px 0 var(--sp-3);
+  border-radius: var(--radius-m);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+  border: 1px solid transparent;
+}
+.sheet .searchbar { background: var(--surface); }
+.searchbar:focus-within { border-color: var(--brand); }
+.searchbar-icon { flex: none; width: 20px; height: 20px; color: var(--label-2); }
+.searchbar .input {
+  padding: 0;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.searchbar .input::-webkit-search-cancel-button { display: none; }
+.searchbar-clear {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: var(--touch);
+  height: var(--touch);
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: none;
+  color: var(--label-3);
+}
+.searchbar-clear svg { width: 18px; height: 18px; }
+
+.action-row { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-2); }
+.action-row .btn { padding: 0 var(--sp-3); }
+
+.search-results > * + * { margin-top: var(--sp-4); }
+.result-group .section-header { padding-left: var(--sp-1); }
+.loading-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  min-height: var(--touch);
+  color: var(--label-2);
+  font-size: var(--fs-subhead);
+}
+.loading-row .spinner { width: 20px; height: 20px; border-width: 2px; }
+
+/* ---------- Favoris ---------- */
+.star-btn { color: var(--label-3); }
+.star-btn.is-fav, .star-on { color: #E5A000; }
+.row-star { display: inline-block; width: 14px; height: 14px; margin-right: 4px; vertical-align: -1px; color: #E5A000; }
+.inline-icon { display: inline-block; width: 13px; height: 13px; margin-left: 2px; vertical-align: -1px; }
+
+/* ---------- Feuille d'ajout et fiche aliment ---------- */
+.entry-head { display: flex; align-items: flex-start; gap: var(--sp-2); }
+.entry-head-main { flex: 1; min-width: 0; }
+.ntable .ntable-sub { padding-left: var(--sp-4); color: var(--label-2); }
+
+/* ---------- Lecteur de code-barres (plein écran) ---------- */
+.scanner {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: #000;
+  color: #fff;
+  overflow: hidden;
+}
+.scanner::backdrop { background: #000; }
+.scanner-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.scanner-shade {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+.scanner-frame {
+  position: relative;
+  width: min(82vw, 420px);
+  height: min(30vh, 200px);
+  border-radius: 18px;
+  border: 3px solid rgba(255, 255, 255, 0.92);
+  box-shadow: 0 0 0 200vmax rgba(0, 0, 0, 0.45);
+  transition: border-color var(--dur) var(--ease);
+}
+.scanner-frame.is-found { border-color: #4CD471; }
+.scanner-line {
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  top: 50%;
+  height: 2px;
+  background: rgba(255, 90, 90, 0.85);
+  box-shadow: 0 0 8px rgba(255, 90, 90, 0.8);
+  animation: scan-line 1.8s ease-in-out infinite alternate;
+}
+@keyframes scan-line { from { transform: translateY(-38px); } to { transform: translateY(38px); } }
+.scanner.is-error .scanner-frame { opacity: 0.25; }
+.scanner-top {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: calc(env(safe-area-inset-top, 0px) + var(--sp-2)) calc(var(--sp-3) + env(safe-area-inset-right, 0px)) var(--sp-2) calc(var(--sp-3) + env(safe-area-inset-left, 0px));
+}
+.scanner-title { text-align: center; font-weight: var(--fw-semibold); }
+.scanner-chip {
+  min-width: var(--touch);
+  min-height: var(--touch);
+  padding: 0 var(--sp-4);
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-weight: var(--fw-semibold);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+}
+.scanner-chip[hidden] { display: none; }
+.scanner-bottom {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: var(--sp-4) calc(var(--gutter) + env(safe-area-inset-right, 0px)) calc(env(safe-area-inset-bottom, 0px) + var(--sp-4)) calc(var(--gutter) + env(safe-area-inset-left, 0px));
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.75), rgba(0, 0, 0, 0));
+}
+.scanner-status {
+  margin-bottom: var(--sp-3);
+  text-align: center;
+  font-size: var(--fs-subhead);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+}
+.scanner-manual { background: rgba(255, 255, 255, 0.18); color: #fff; }

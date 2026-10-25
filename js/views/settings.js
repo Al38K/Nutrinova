@@ -3,7 +3,9 @@
 
 import { h, mount, setAppbar, section, row, segmented, installBanner, iconEl, toast } from '../ui.js';
 import { getAllSettings, setSetting, applyTheme } from '../data/settings.js';
-import { countAll } from '../data/db.js';
+import { countAll, getAllByIndex } from '../data/db.js';
+import { ensureCiqual, getCiqualState } from '../data/ciqual.js';
+import { OFF_SITE } from '../data/off.js';
 import { STORES, STORE_LABELS, SCHEMA_VERSION } from '../data/schema.js';
 import { isStandalone, checkPersisted, estimateStorage } from '../data/storage.js';
 import { runSelfTest } from '../data/selftest.js';
@@ -71,14 +73,17 @@ export default {
   async render(root) {
     setAppbar({ title: 'Réglages' });
 
-    const [settings, persisted, estimate, counts, swVersion, goal] = await Promise.all([
+    const [settings, persisted, estimate, counts, swVersion, goal, offCached] = await Promise.all([
       getAllSettings(),
       checkPersisted(),
       estimateStorage(),
       countAll(Object.values(STORES).filter((s) => s !== STORES.settings)),
       getServiceWorkerVersion(),
-      getGoalForDate(localDateKey())
+      getGoalForDate(localDateKey()),
+      getAllByIndex(STORES.foods, 'source', 'off').then((l) => l.length).catch(() => null),
+      ensureCiqual().catch(() => null)
     ]);
+    const ciqual = getCiqualState();
     const standalone = isStandalone();
     const test = selfTestCard();
 
@@ -136,6 +141,22 @@ export default {
       }
     });
 
+    const ciqualRow = row({
+      title: 'Table Ciqual (ANSES)',
+      subtitle: ciqual.status === 'ready'
+        ? `Aliments courants · version ${ciqual.meta && ciqual.meta.version ? ciqual.meta.version : '—'}`
+        : ciqual.status === 'error' ? `Indisponible : ${ciqual.error}` : 'En préparation…',
+      value: ciqual.status === 'ready' ? `${formatNumber(ciqual.count)} aliments` : '—'
+    });
+    const offRow = h('a', { class: 'row', href: OFF_SITE, target: '_blank', rel: 'noopener' },
+      h('span', { class: 'row-main' },
+        h('span', { class: 'row-title' }, 'Open Food Facts'),
+        h('span', { class: 'row-subtitle' }, 'Produits du commerce · licence ODbL')
+      ),
+      h('span', { class: 'row-value' }, offCached === null ? '—' : `${formatNumber(offCached)} en cache`),
+      iconEl('external', 'row-chevron')
+    );
+
     mount(root,
       installBanner(),
       section({
@@ -161,6 +182,11 @@ export default {
         footer: 'L\'export crée un fichier JSON avec le journal, les aliments, les recettes, les objectifs, les pesées et les réglages. Enregistrez-le dans Fichiers (iCloud Drive). Un rappel s\'affiche dans le Journal après 7 jours sans sauvegarde.'
       }),
       appearance,
+      section({
+        header: 'Sources des données',
+        rows: [ciqualRow, offRow],
+        footer: `${ciqual.meta && ciqual.meta.source ? ciqual.meta.source : 'ANSES, table de composition nutritionnelle des aliments Ciqual'}${ciqual.meta && ciqual.meta.license ? `, ${ciqual.meta.license}` : ''}. Open Food Facts : données des contributeurs d'Open Food Facts, licence ODbL. Lecture des codes-barres : ZXing (licence Apache 2.0), zxing-wasm et barcode-detector (licence MIT).`
+      }),
       section({
         header: 'Stockage sur cet iPhone',
         rows: storageRows,

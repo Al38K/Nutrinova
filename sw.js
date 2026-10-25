@@ -2,7 +2,7 @@
  * À CHAQUE LIVRAISON : la valeur VERSION doit être identique à APP_VERSION dans js/config.js.
  * Changer VERSION déclenche la mise à jour de l'app sur l'iPhone.
  */
-const VERSION = '1.1.0';
+const VERSION = '1.2.0';
 const CACHE_PREFIX = 'nutrinova-';
 const CACHE_NAME = CACHE_PREFIX + VERSION;
 
@@ -35,12 +35,20 @@ const APP_FILES = [
   './js/data/goals.js',
   './js/data/foods.js',
   './js/data/backup.js',
+  './js/data/barcode.js',
+  './js/data/off.js',
+  './js/data/search.js',
+  './js/data/ciqual.js',
   './js/components/journal-parts.js',
   './js/components/energy-split.js',
+  './js/components/food-search.js',
   './js/sheets/entry-sheet.js',
   './js/sheets/food-form.js',
   './js/sheets/food-picker.js',
   './js/sheets/backup-sheets.js',
+  './js/sheets/food-sheet.js',
+  './js/sheets/scan-flow.js',
+  './js/scanner/scanner.js',
   './js/views/journal.js',
   './js/views/foods.js',
   './js/views/recipes.js',
@@ -54,7 +62,10 @@ const APP_FILES = [
   './icons/apple-touch-icon.png',
   './icons/icon-192.png',
   './icons/icon-512.png',
-  './icons/icon-maskable-512.png'
+  './icons/icon-maskable-512.png',
+  './vendor/barcode-detector/ponyfill.js',
+  './vendor/barcode-detector/zxing_reader.wasm',
+  './data/ciqual.json'
 ];
 
 self.addEventListener('install', (event) => {
@@ -89,7 +100,7 @@ self.addEventListener('fetch', (event) => {
   const req = event.request;
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
-  // Les requêtes vers d'autres sites (Open Food Facts en Phase 3) ne sont pas interceptées.
+  // Les requêtes vers d'autres sites (Open Food Facts) ne sont pas interceptées : elles passent par le réseau.
   if (url.origin !== self.location.origin) return;
 
   if (req.mode === 'navigate') {

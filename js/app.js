@@ -6,6 +6,7 @@ import { requestPersistence } from './data/storage.js';
 import { registerServiceWorker } from './pwa.js';
 import { startRouter } from './router.js';
 import { renderFatal, toast } from './ui.js';
+import { ensureCiqual } from './data/ciqual.js';
 
 import journal from './views/journal.js';
 import foods from './views/foods.js';
@@ -59,6 +60,11 @@ async function boot() {
   });
 
   await startRouter({ views: VIEWS, tabs: TABS, defaultRoute: 'journal' });
+
+  // Table Ciqual préparée en arrière-plan, après le premier affichage (environ 1 s la première fois).
+  setTimeout(() => {
+    ensureCiqual().catch((err) => console.warn('Table Ciqual non préparée :', err));
+  }, 800);
 }
 
 boot();

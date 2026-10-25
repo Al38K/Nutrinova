@@ -16,8 +16,8 @@ export const BACKUP_STORES = Object.freeze([
   STORES.foods, STORES.recipes, STORES.journal, STORES.goals, STORES.weights, STORES.settings
 ]);
 
-// Réglages propres à cet appareil (diagnostic, date de sauvegarde) ou secrets (clé API) : jamais exportés.
-const SETTINGS_EXCLUDED = new Set(['schemaVersion', 'firstLaunchAt', 'lastLaunchAt', 'launchCount', 'lastBackupAt', 'visionApiKey']);
+// Réglages propres à cet appareil (diagnostic, date de sauvegarde, table Ciqual) ou secrets (clé API) : jamais exportés.
+const SETTINGS_EXCLUDED = new Set(['schemaVersion', 'firstLaunchAt', 'lastLaunchAt', 'launchCount', 'lastBackupAt', 'visionApiKey', 'ciqualVersion', 'ciqualMeta']);
 const IMPORTABLE_SETTINGS = Object.freeze(Object.keys(SETTING_DEFAULTS).filter((k) => !SETTINGS_EXCLUDED.has(k)));
 
 export class BackupError extends Error {

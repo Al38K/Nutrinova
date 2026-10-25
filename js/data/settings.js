@@ -13,7 +13,9 @@ export const SETTING_DEFAULTS = Object.freeze({
   backupReminderDays: null,   // Phase 7
   weighDay: null,             // Phase 5
   weighTime: null,            // Phase 5
-  offAttributionAck: false,   // Phase 3
+  offAttributionAck: false,   // Phase 3 : information Open Food Facts lue
+  ciqualVersion: null,        // Phase 3 : version de la table Ciqual copiée dans la base
+  ciqualMeta: null,           // Phase 3 : description de la table Ciqual (JSON)
   photoConsentAt: null,       // Phase 6
   visionProvider: null,       // Phase 6
   visionApiKey: null,         // Phase 6

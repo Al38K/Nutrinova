@@ -1,6 +1,7 @@
 // Autotest, lancé depuis Réglages. Vérifie sur l'iPhone lui-même :
 // structure de la base, écritures/relectures, index, transactions, calculs, validations,
-// journal (ajout, modification, suppression), objectifs versionnés et contrôle des sauvegardes.
+// journal (ajout, modification, suppression), objectifs versionnés, contrôle des sauvegardes,
+// codes-barres, lecture des fiches Open Food Facts (exemples), vos aliments et la table Ciqual.
 // Les enregistrements de test sont datés de janvier 1900 et supprimés à la fin, même en cas d'échec.
 
 import * as db from './db.js';
@@ -11,6 +12,11 @@ import { getSetting, THEMES } from './settings.js';
 import { addEntry, updateEntry, deleteEntry, restoreEntry, computeTotals, resolveQuantity } from './entries.js';
 import { getGoalForDate, saveGoal, goalTargets, goalWarnings } from './goals.js';
 import { buildBackup, validateBackup, BackupError, BACKUP_FORMAT, BACKUP_FORMAT_VERSION } from './backup.js';
+import { checkBarcode, canonicalBarcode, expandUpcE } from './barcode.js';
+import { offToFood, offHitSummary } from './off.js';
+import { rankLocalFoods, queryWords, matchScore } from './search.js';
+import { setFavorite, updateFood, deleteFood, restoreFood, findFoodsByBarcode, findBySource } from './foods.js';
+import { ensureCiqual, searchCiqual, getCiqualState, ciqualToFood } from './ciqual.js';
 import { localDateKey, isDateKey, addDays } from '../util/dates.js';
 import { normalizeName } from '../util/text.js';
 import { parseDecimal, formatNutrient, formatGrams } from '../util/format.js';
@@ -26,8 +32,11 @@ const TEST_IDS = {
   recipe: 'selftest-recipe',
   goal: 'selftest-goal',
   goal2: 'selftest-goal-2',
-  ciqual: 'SELFTEST'
+  ciqual: 'SELFTEST',
+  custom: 'selftest-custom',
+  offFood: 'selftest-off'
 };
+const TEST_REFS = { ciqual: 'SELFTEST-C', off: 'SELFTEST-OFF' };
 
 class AssertError extends Error {}
 function assert(cond, message) {
@@ -52,7 +61,18 @@ function expectThrow(fn, ErrorType, label) {
 }
 
 async function cleanup() {
-  await db.run(Object.values(STORES), 'readwrite', (tx) => {
+  await db.run(Object.values(STORES), 'readwrite', async (tx) => {
+    const foods = tx.objectStore(STORES.foods);
+    for (const id of [TEST_IDS.custom, TEST_IDS.offFood]) foods.delete(id);
+    for (const ref of [['ciqual', TEST_REFS.ciqual], ['off', TEST_REFS.off]]) {
+      const keys = await db.req(foods.index('source_ref').getAllKeys(ref));
+      for (const k of keys) foods.delete(k);
+    }
+    const journal = tx.objectStore(STORES.journal);
+    for (const d of [TEST_DATE, TEST_DATE_2]) {
+      const keys = await db.req(journal.index('date').getAllKeys(d));
+      for (const k of keys) journal.delete(k);
+    }
     tx.objectStore(STORES.foods).delete(TEST_IDS.food);
     tx.objectStore(STORES.foods).delete(TEST_IDS.food2);
     tx.objectStore(STORES.journal).delete(TEST_IDS.entry);
@@ -321,6 +341,104 @@ const TESTS = [
       const reread = validateBackup(JSON.parse(built.json));
       assertEq(reread.counts.journal, built.counts.journal, 'Votre export actuel se relit sans perte');
       return `export actuel valide (${built.counts.journal} entrées, ${built.counts.foods} aliments)`;
+    }
+  },
+  {
+    name: 'Codes-barres : contrôle du chiffre final et forme canonique',
+    async run() {
+      assert(checkBarcode('3017620422003').ok, 'EAN-13 valide accepté');
+      assert(!checkBarcode('3017620422004').ok, 'Faute de frappe détectée');
+      assert(checkBarcode('96385074').ok, 'EAN-8 valide accepté');
+      assert(!checkBarcode('30176A').ok, 'Lettres refusées');
+      assertEq(canonicalBarcode('034000470693'), '0034000470693', 'UPC-A → EAN-13');
+      assertEq(canonicalBarcode('0034000470693'), '0034000470693', 'EAN-13 inchangé');
+      assertEq(canonicalBarcode('00096385074'), '96385074', 'Zéros superflus retirés (EAN-8)');
+      assertEq(expandUpcE('04252614'), '042100005264', 'UPC-E → UPC-A');
+      return 'EAN-13, EAN-8, UPC-A, UPC-E';
+    }
+  },
+  {
+    name: 'Open Food Facts : lecture des fiches (exemples)',
+    async run() {
+      // Fiche pour 100 g (valeurs reprises d'un exemple de la documentation Open Food Facts).
+      const a = offToFood({
+        code: '4260392550101', product_name: 'test_default', brands: 'Marque A, Marque B',
+        product_quantity_unit: 'g', serving_size: '10 g', serving_quantity: 10, serving_quantity_unit: 'g',
+        nutrition_data_per: '100g',
+        nutriments: { 'energy-kcal_100g': 140.5, proteins_100g: 4.5, carbohydrates_100g: 10.5, fat_100g: 8.5, fiber_100g: 2, sugars_100g: 12.5, salt_100g: 0.0502 }
+      });
+      assertEq([a.food.basis, a.food.per100.kcal, a.food.per100.protein, a.food.per100.salt], ['g', 140.5, 4.5, 0.0502], 'Valeurs pour 100 g');
+      assertEq([a.food.brand, a.food.servingSize, a.food.barcode, a.food.source], ['Marque A', 10, '4260392550101', 'off'], 'Marque, portion, code, source');
+      assert(a.food.per100.alcohol === null, 'Alcool absent → vide');
+      // Boisson vendue en ml, énergie en kJ seulement, sodium sans sel.
+      const b = offToFood({ code: '5449000000996', product_name_fr: 'Boisson test', product_quantity_unit: 'ml', nutriments: { 'energy-kj_100g': 180, sodium_100g: 0.004 } });
+      assertEq(b.food.basis, 'ml', 'Produit en ml → valeurs pour 100 ml');
+      assert(approx(b.food.per100.kcal, 180 / 4.184) && approx(b.food.per100.salt, 0.01), 'kJ → kcal, sodium → sel');
+      assert(b.food.per100.protein === null && b.derived.length === 2, 'Conversions signalées, protéines vides');
+      // Fiche sans valeurs : rien n'est inventé.
+      const c = offToFood({ code: '3017620422003', nutriments: {} });
+      assert(c.noData && c.food.per100.kcal === null, 'Fiche sans valeurs → toutes vides');
+      assertEq(c.food.name, 'Produit 3017620422003', 'Nom absent → « Produit + code »');
+      // Valeur impossible écartée et signalée, jamais corrigée.
+      const d = offToFood({ code: '96385074', product_name: 'X', nutriments: { fat_100g: 250, proteins_100g: 3 } });
+      assert(d.food.per100.fat === null && d.issues.length === 1 && d.food.per100.protein === 3, 'Lipides 250 g/100 g écartés');
+      // Bière : alcool en % vol → grammes (× 0,789) ; données « pour 100 ml ».
+      const e = offToFood({ code: '12345670', product_name: 'Bière', nutrition_data_per: '100ml', nutriments: { alcohol_100g: 5, 'energy-kcal_100g': 43 } });
+      assert(e.food.basis === 'ml' && approx(e.food.per100.alcohol, 3.945), '5 % vol = 3,9 g d\'alcool pour 100 ml');
+      const s = offHitSummary({ code: '34000470693', product_name: { main: 'Main', fr: 'Nom FR' }, brands: ['Marque'], nutriments: { 'energy-kcal_100g': 99 } });
+      assertEq([s.code, s.name, s.brand, s.kcal], ['0034000470693', 'Nom FR', 'Marque', 99], 'Résultat de recherche');
+      return '7 cas (g, ml, kJ, sodium, alcool, vide, impossible)';
+    }
+  },
+  {
+    name: 'Vos aliments : priorité, favori, modification, suppression',
+    async run() {
+      const off = createFood({ id: TEST_IDS.offFood, source: 'off', sourceRef: TEST_REFS.off, barcode: '96385074', name: 'Autotest pomme', per100: { kcal: 50, protein: 0.3, carbs: 11, fat: 0.2 } });
+      const custom = createFood({ id: TEST_IDS.custom, source: 'custom', barcode: '96385074', name: 'Autotest pomme perso', per100: { kcal: 52 } });
+      await db.putMany(STORES.foods, [off, custom]);
+      const ranked = rankLocalFoods([off, custom], 'Autotest pommes');
+      assertEq(ranked.map((f) => f.id), [TEST_IDS.custom, TEST_IDS.offFood], 'Aliment personnalisé en tête (pluriel accepté)');
+      assert(matchScore('pomme pulpe et peau crue', queryWords('pomme crue')) > matchScore('compote de pomme crue', queryWords('pomme crue')), 'Nom commençant par le mot cherché en premier');
+      const byCode = await findFoodsByBarcode('0000096385074');
+      assertEq(byCode[0] && byCode[0].id, TEST_IDS.custom, 'Scan : aliment personnalisé prioritaire');
+      const fav = await setFavorite(off, true);
+      assert(fav.favorite && fav.id === TEST_IDS.offFood, 'Mis en favori');
+      const edited = await updateFood(fav, { name: 'Autotest pomme corrigée', basis: 'g', per100: { kcal: 55 }, barcode: '96385074' });
+      assertEq([edited.id, edited.source, edited.favorite], [TEST_IDS.offFood, 'custom', true], 'Modifié : devient personnel, favori conservé');
+      const removed = await deleteFood(TEST_IDS.offFood);
+      assert(removed && !(await db.get(STORES.foods, TEST_IDS.offFood)), 'Supprimé');
+      await restoreFood(removed);
+      assert(await db.get(STORES.foods, TEST_IDS.offFood), 'Suppression annulée');
+      return 'personnalisé prioritaire, favori, modification, suppression';
+    }
+  },
+  {
+    name: 'Ajout d\'un aliment Ciqual ou Open Food Facts : enregistré une seule fois',
+    async run() {
+      const mk = () => createFood({ source: 'ciqual', sourceRef: TEST_REFS.ciqual, name: 'Autotest Ciqual', per100: { kcal: 40, protein: 1, carbs: 8, fat: 0.2 } });
+      const e1 = await addEntry({ date: TEST_DATE, meal: 'lunch', food: mk(), quantity: 150, inputUnit: 'g', inputValue: 150 });
+      const e2 = await addEntry({ date: TEST_DATE, meal: 'dinner', food: mk(), quantity: 80, inputUnit: 'g', inputValue: 80 });
+      const stored = await findBySource('ciqual', TEST_REFS.ciqual);
+      assert(stored, 'Aliment enregistré au premier ajout');
+      assertEq([e1.foodId, e2.foodId], [stored.id, stored.id], 'Les deux entrées pointent vers la même copie');
+      assertEq(stored.useCount, 2, 'Historique : 2 utilisations');
+      const keys = await db.run(STORES.foods, 'readonly', (tx) => db.req(tx.objectStore(STORES.foods).index('source_ref').getAllKeys(['ciqual', TEST_REFS.ciqual])));
+      assertEq(keys.length, 1, 'Une seule copie');
+      return '2 ajouts, 1 aliment enregistré';
+    }
+  },
+  {
+    name: 'Table Ciqual : chargée et cherchable hors ligne',
+    async run() {
+      await ensureCiqual();
+      const st = getCiqualState();
+      assert(st.count >= 3000, `Table incomplète : ${st.count} aliments`);
+      const { items } = searchCiqual('pomme crue', { limit: 5 });
+      assert(items.length > 0, 'Recherche « pomme crue » sans résultat');
+      const f = ciqualToFood(items[0]);
+      assertEq([f.source, f.basis, f.sourceRef], ['ciqual', 'g', items[0].code], 'Conversion en aliment');
+      const withKcal = items.filter((it) => it.per100.kcal !== null).length;
+      return `${st.count} aliments (version ${st.meta && st.meta.version}), « ${items[0].name} » ${withKcal ? 'avec' : 'sans'} énergie`;
     }
   }
 ];

@@ -1,11 +1,14 @@
 // Feuille de saisie d'une quantité : ajout d'un aliment au journal, ou modification d'une entrée.
 
-import { h, openSheet, fieldControl, segmented, banner, toast } from '../ui.js';
+import { h, openSheet, fieldControl, segmented, banner, toast, iconEl } from '../ui.js';
 import { parseDecimal, formatNumber, formatKcal, formatGrams, isNum } from '../util/format.js';
 import { scaleNutrients, checkEnergyCoherence, hasNoCoreData } from '../data/nutrients.js';
 import { MEALS, MEAL_LABELS, LIMITS, ValidationError, SOURCE_LABELS } from '../data/model.js';
 import { addEntry, updateEntry, deleteEntry, restoreEntry, resolveQuantity, defaultInput } from '../data/entries.js';
+import { setFavorite } from '../data/foods.js';
+import { ciqualLabel } from '../data/ciqual.js';
 import { formatQty } from '../components/journal-parts.js';
+import { openFoodForm } from './food-form.js';
 
 const MEAL_SHORT = Object.freeze({ breakfast: 'Petit-déj.', lunch: 'Déjeuner', dinner: 'Dîner', snack: 'Snack' });
 
@@ -19,20 +22,47 @@ function per100Line(per100, basis) {
   return `Pour 100 ${basis} : ${formatKcal(per100.kcal)} · P ${formatGrams(per100.protein)} · G ${formatGrams(per100.carbs)} · L ${formatGrams(per100.fat)}`;
 }
 
-/** Avertissements liés aux valeurs de l'aliment (jamais corrigées automatiquement). */
-function dataWarnings(per100, basis) {
+/** Libellé de la source d'un aliment. */
+export function sourceLabel(food) {
+  if (!food) return null;
+  if (food.source === 'ciqual') return ciqualLabel();
+  if (food.source === 'off') return 'Open Food Facts (ODbL)';
+  return SOURCE_LABELS[food.source] || null;
+}
+
+/**
+ * Avertissements liés aux valeurs de l'aliment (jamais corrigées automatiquement).
+ * onFix : action « Compléter les valeurs » (null en modification d'entrée : l'instantané est figé).
+ */
+export function dataWarnings(per100, basis, onFix = null) {
+  const fixBtn = (label) => (onFix
+    ? h('button', { type: 'button', class: 'btn btn-tinted', onclick: onFix }, iconEl('edit'), label)
+    : null);
   if (hasNoCoreData(per100)) {
     return banner({
       kind: 'warning',
       title: 'Valeurs nutritionnelles inconnues',
-      text: 'Cette entrée sera comptée comme manquante : les totaux du jour seront signalés partiels.'
+      text: 'Cette entrée sera comptée comme manquante : les totaux du jour seront signalés partiels. Saisissez les valeurs de l\'étiquette.',
+      actions: fixBtn('Compléter les valeurs')
     });
   }
   if (!isNum(per100.kcal)) {
     return banner({
       kind: 'warning',
       title: 'Calories inconnues',
-      text: 'Cette entrée ne comptera pas dans le total des calories : il sera signalé partiel.'
+      text: 'Cette entrée ne comptera pas dans le total des calories : il sera signalé partiel.',
+      actions: fixBtn('Compléter les valeurs')
+    });
+  }
+  const missing = ['protein', 'carbs', 'fat'].filter((k) => !isNum(per100[k]));
+  if (missing.length) {
+    const names = { protein: 'protéines', carbs: 'glucides', fat: 'lipides' };
+    const several = missing.length > 1;
+    return banner({
+      kind: 'warning',
+      title: `${several ? 'Valeurs manquantes' : 'Valeur manquante'} : ${missing.map((k) => names[k]).join(', ')}`,
+      text: several ? 'Les totaux de ces macros seront signalés partiels.' : 'Le total de cette macro sera signalé partiel.',
+      actions: fixBtn('Compléter les valeurs')
     });
   }
   const c = checkEnergyCoherence(per100);
@@ -40,10 +70,24 @@ function dataWarnings(per100, basis) {
     return banner({
       kind: 'warning',
       title: 'Écart de calories supérieur à 10 %',
-      text: `Calories indiquées : ${formatKcal(c.declared)} pour 100 ${basis}. Calcul à partir des macros : ${formatKcal(c.computed)}. Vérifiez l'étiquette ; la valeur indiquée est conservée.`
+      text: `Calories indiquées : ${formatKcal(c.declared)} pour 100 ${basis}. Calcul à partir des macros : ${formatKcal(c.computed)}. Vérifiez l'étiquette ; la valeur indiquée est conservée.`,
+      actions: fixBtn('Corriger les valeurs')
     });
   }
   return null;
+}
+
+/** Remarques sur la lecture d'une fiche Open Food Facts (valeurs écartées, conversions). */
+export function infoNotes(info) {
+  if (!info) return null;
+  const parts = [];
+  if (info.issues && info.issues.length) {
+    parts.push(banner({ kind: 'warning', title: 'Valeur incohérente dans la fiche', text: info.issues.join(' ') }));
+  }
+  if (info.derived && info.derived.length) {
+    parts.push(h('p', { class: 'hint' }, `Calcul : ${info.derived.join(', ')}.`));
+  }
+  return parts.length ? parts : null;
 }
 
 function undoAddToast(entry, onDone) {
@@ -78,16 +122,24 @@ export async function quickAdd({ food, date, meal, onDone }) {
 /** Libellé de la quantité par défaut d'un aliment : « 1 pot (125 g) » ou « 100 g ». */
 export function defaultInputLabel(food) {
   const { inputUnit, inputValue } = defaultInput(food);
-  if (inputUnit === 'portion') return `1 ${food.servingLabel || 'portion'} (${formatQty(food.servingSize, food.basis)})`;
+  if (inputUnit === 'portion') {
+    const qty = formatQty(food.servingSize, food.basis);
+    const label = food.servingLabel || '';
+    if (!label) return `1 portion (${qty})`;
+    if (label.includes('(')) return label;                    // « 1 pot (125 g) »
+    return /^\d/.test(label) ? `${label} (${qty})` : `1 ${label} (${qty})`; // « 1 pot » ou « pot »
+  }
   return formatQty(inputValue, food.basis);
 }
 
 /**
  * Ouvre la feuille de quantité.
- * Ajout : { food, date, meal, onDone }. Modification : { entry, onDone }.
+ * Ajout : { food, date, meal, onDone, info }. Modification : { entry, onDone }.
+ * info (facultatif) : remarques de lecture Open Food Facts { issues, derived }.
  */
-export function openEntrySheet({ food, entry, date, meal, onDone }) {
+export function openEntrySheet({ food, entry, date, meal, onDone, info = null }) {
   const editing = Boolean(entry);
+  let current = food || null;
   const ctx = editing
     ? {
         name: entry.nameSnapshot,
@@ -99,11 +151,11 @@ export function openEntrySheet({ food, entry, date, meal, onDone }) {
       }
     : {
         name: food.brand ? `${food.name} — ${food.brand}` : food.name,
-        sourceLabel: SOURCE_LABELS[food.source] || null,
+        sourceLabel: sourceLabel(food),
         basis: food.basis,
         per100: food.per100,
         servingSize: isNum(food.servingSize) ? food.servingSize : null,
-        servingLabel: food.servingLabel ? `Portion (${food.servingLabel})` : 'Portion'
+        servingLabel: food.servingLabel ? `Portion (${food.servingLabel.replace(/\s*\(.*\)\s*$/, '')})` : 'Portion'
       };
 
   const initial = editing
@@ -208,7 +260,7 @@ export function openEntrySheet({ food, entry, date, meal, onDone }) {
             if (onDone) onDone();
             toast('Entrée modifiée');
           } else {
-            const added = await addEntry({ date, meal: state.meal, food, quantity, inputUnit: state.unit, inputValue: v });
+            const added = await addEntry({ date, meal: state.meal, food: current, quantity, inputUnit: state.unit, inputValue: v });
             close();
             if (onDone) onDone();
             undoAddToast(added, onDone);
@@ -250,16 +302,53 @@ export function openEntrySheet({ food, entry, date, meal, onDone }) {
           }, 'Supprimer l\'entrée')
         : null;
 
+      // Favori (ajout seulement) : enregistre l'aliment au besoin.
+      let favBtn = null;
+      if (!editing) {
+        const paintFav = () => {
+          favBtn.replaceChildren(iconEl(current.favorite ? 'starFill' : 'star'));
+          favBtn.classList.toggle('is-fav', Boolean(current.favorite));
+          favBtn.setAttribute('aria-label', current.favorite ? 'Retirer des favoris' : 'Ajouter aux favoris');
+          favBtn.setAttribute('aria-pressed', String(Boolean(current.favorite)));
+        };
+        favBtn = h('button', {
+          type: 'button',
+          class: 'btn btn-plain btn-icon star-btn',
+          onclick: async () => {
+            try {
+              current = await setFavorite(current, !current.favorite);
+              paintFav();
+              toast(current.favorite ? 'Ajouté aux favoris' : 'Retiré des favoris');
+            } catch (err) {
+              toast(`Favori non enregistré : ${err.message}`);
+            }
+          }
+        });
+        paintFav();
+      }
+
+      const fix = editing ? null : () => {
+        close();
+        openFoodForm({
+          food: current,
+          onSaved: (saved) => openEntrySheet({ food: saved, date, meal: state.meal, onDone })
+        });
+      };
+
       const form = h('form', {
         class: 'stack',
         novalidate: true,
         onsubmit: (e) => { e.preventDefault(); submit(); }
       },
-        h('div', {},
-          h('p', { class: 't-headline' }, ctx.name),
-          h('p', { class: 'hint' }, [ctx.sourceLabel, per100Line(ctx.per100, ctx.basis)].filter(Boolean).join(' · '))
+        h('div', { class: 'entry-head' },
+          h('div', { class: 'entry-head-main' },
+            h('p', { class: 't-headline' }, ctx.name),
+            h('p', { class: 'hint' }, [ctx.sourceLabel, per100Line(ctx.per100, ctx.basis)].filter(Boolean).join(' · '))
+          ),
+          favBtn
         ),
-        dataWarnings(ctx.per100, ctx.basis),
+        infoNotes(info),
+        dataWarnings(ctx.per100, ctx.basis, fix),
         qty.root,
         unitControl,
         preview,

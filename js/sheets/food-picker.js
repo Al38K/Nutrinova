@@ -1,18 +1,17 @@
-// Choix d'un aliment à ajouter à un repas : aliments déjà enregistrés (favoris et récents en tête),
-// filtre local, création d'un aliment personnalisé. Le « + » de chaque ligne ajoute directement
-// la quantité par défaut (2 tapotements depuis le Journal).
-// Scan du code-barres et recherche Open Food Facts / Ciqual : Phase 3.
+// Choix d'un aliment à ajouter à un repas : recherche (vos aliments, Ciqual, Open Food Facts),
+// scan du code-barres, favoris et historique, création d'un aliment personnalisé.
+// Le « + » de chaque ligne ajoute directement la quantité par défaut (2 tapotements depuis le Journal).
 
-import { h, openSheet, fieldControl, iconEl, toast } from '../ui.js';
-import { formatKcal, isNum } from '../util/format.js';
-import { scaleNutrients } from '../data/nutrients.js';
+import { h, openSheet, iconEl, toast } from '../ui.js';
 import { MEAL_LABELS } from '../data/model.js';
-import { listFoods, filterFoods } from '../data/foods.js';
-import { defaultInput, resolveQuantity } from '../data/entries.js';
-import { openEntrySheet, quickAdd, defaultInputLabel } from './entry-sheet.js';
+import { listFoods, favoritesOf, recentsOf } from '../data/foods.js';
+import { ensureCiqual } from '../data/ciqual.js';
+import { openEntrySheet, quickAdd } from './entry-sheet.js';
 import { openFoodForm } from './food-form.js';
+import { startScan, resolveOffHit } from './scan-flow.js';
+import { createFoodSearch, foodRow, localSub, group } from '../components/food-search.js';
 
-const MAX_ROWS = 150;
+const MAX_RECENTS = 20;
 
 export async function openFoodPicker({ date, meal, onDone }) {
   let foods;
@@ -22,86 +21,98 @@ export async function openFoodPicker({ date, meal, onDone }) {
     toast(`Liste des aliments indisponible : ${err.message}`);
     return;
   }
+  ensureCiqual().catch(() => { /* l'état d'erreur est affiché dans la recherche */ });
 
+  let search = null;
   openSheet({
     title: `Ajouter · ${MEAL_LABELS[meal]}`,
     closeLabel: 'Annuler',
+    onClose: () => { if (search) search.destroy(); },
     content: (close) => {
-      const list = h('div', { class: 'pick-list' });
-      const info = h('p', { class: 'hint' });
-
-      const createFood = (initialName) => {
+      const pick = (food, info = null) => {
         close();
-        openFoodForm({
-          initialName,
-          onSaved: (food) => openEntrySheet({ food, date, meal, onDone })
-        });
+        openEntrySheet({ food, date, meal, onDone, info });
       };
 
-      const foodRow = (food) => {
-        const def = defaultInput(food);
-        const q = resolveQuantity(food, def.inputUnit, def.inputValue);
-        const n = scaleNutrients(food.per100, q);
-        const label = defaultInputLabel(food);
-        return h('div', { class: 'pick-row' },
-          h('button', {
-            type: 'button',
-            class: 'pick-main',
-            onclick: () => {
-              close();
-              openEntrySheet({ food, date, meal, onDone });
-            }
-          },
-            h('span', { class: 'pick-name' }, food.name),
-            h('span', { class: 'pick-sub' }, [food.brand, label, isNum(n.kcal) ? formatKcal(n.kcal) : 'kcal inconnues'].filter(Boolean).join(' · '))
-          ),
-          h('button', {
-            type: 'button',
-            class: 'btn btn-tinted btn-icon pick-side',
-            'aria-label': `Ajouter ${food.name}, ${label}`,
-            onclick: (e) => {
-              e.currentTarget.disabled = true;
-              close();
-              quickAdd({ food, date, meal, onDone });
-            }
-          }, iconEl('plus'))
-        );
+      const quick = (food) => {
+        close();
+        quickAdd({ food, date, meal, onDone });
       };
 
-      const search = fieldControl({
-        label: 'Rechercher dans vos aliments',
-        id: 'picker-search',
-        placeholder: 'Nom ou marque',
-        enterkeyhint: 'search',
-        onInput: (value) => renderList(value)
-      });
+      const plusBtn = (label, onClick) => h('button', {
+        type: 'button',
+        class: 'btn btn-tinted btn-icon pick-side',
+        'aria-label': `Ajouter ${label}`,
+        onclick: (e) => {
+          e.currentTarget.disabled = true;
+          onClick();
+        }
+      }, iconEl('plus'));
 
-      function renderList(query = '') {
-        const found = filterFoods(foods, query);
-        if (!foods.length) {
-          list.hidden = true;
-          info.textContent = 'Aucun aliment enregistré pour l\'instant. Créez votre premier aliment avec les valeurs de son étiquette.';
+      const open = async (kind, item) => {
+        if (kind === 'off') {
+          const res = await resolveOffHit(item);
+          if (res) pick(res.food, res.info);
           return;
         }
-        list.hidden = found.length === 0;
-        list.replaceChildren(...found.slice(0, MAX_ROWS).map(foodRow));
-        if (!found.length) info.textContent = `Aucun aliment ne correspond à « ${query.trim()} ».`;
-        else if (found.length > MAX_ROWS) info.textContent = `${MAX_ROWS} premiers résultats sur ${found.length} : précisez la recherche.`;
-        else info.textContent = 'Touchez un aliment pour choisir la quantité, ou « + » pour ajouter la quantité indiquée.';
-      }
+        pick(item);
+      };
 
-      renderList();
-      return h('div', { class: 'stack' },
-        foods.length ? search.root : null,
+      const side = (kind, item) => {
+        if (kind === 'off') {
+          return plusBtn(item.name, async () => {
+            const res = await resolveOffHit(item);
+            if (res) quick(res.food);
+          });
+        }
+        return plusBtn(item.name, () => quick(item));
+      };
+
+      const localRow = (food) => foodRow({
+        title: food.name,
+        sub: localSub(food),
+        onMain: () => pick(food),
+        side: side('local', food)
+      });
+
+      const renderEmpty = (container) => {
+        const favs = favoritesOf(foods);
+        const recents = recentsOf(foods, MAX_RECENTS).filter((f) => !f.favorite);
+        const parts = [];
+        if (favs.length) parts.push(group('Favoris', favs.map(localRow)));
+        if (recents.length) parts.push(group('Récents', recents.map(localRow)));
+        if (!parts.length) {
+          parts.push(h('p', { class: 'hint' }, 'Recherchez un aliment (ex. « pomme », « riz cuit »), scannez un produit emballé ou créez votre propre aliment. Vos favoris et vos derniers aliments apparaîtront ici.'));
+        } else {
+          parts.push(h('p', { class: 'hint' }, 'Touchez un aliment pour choisir la quantité, ou « + » pour ajouter la quantité indiquée.'));
+        }
+        container.append(...parts);
+      };
+
+      search = createFoodSearch({ getFoods: () => foods, side, open, renderEmpty, placeholder: 'Aliment, plat, marque…' });
+
+      const actions = h('div', { class: 'action-row' },
         h('button', {
           type: 'button',
-          class: 'btn btn-tinted btn-block',
-          onclick: () => createFood(search.input.value.trim())
-        }, iconEl('plus'), 'Créer un aliment'),
-        info,
-        list,
-        h('p', { class: 'hint' }, 'Scan du code-barres et recherche dans Open Food Facts et la table Ciqual : prochaine phase.')
+          class: 'btn btn-primary',
+          onclick: () => {
+            close();
+            startScan({ mode: 'add', date, meal, onDone });
+          }
+        }, iconEl('barcode'), 'Scanner'),
+        h('button', {
+          type: 'button',
+          class: 'btn btn-tinted',
+          onclick: () => {
+            const name = search.input.value.trim();
+            close();
+            openFoodForm({ initialName: name, onSaved: (food) => openEntrySheet({ food, date, meal, onDone }) });
+          }
+        }, iconEl('plus'), 'Créer un aliment')
       );
+
+      search.render();
+      return h('div', { class: 'stack' }, search.bar, actions, search.results);
     }
   });
 }
