@@ -79,9 +79,17 @@ export function recipeNotices(ingredients, calc, context = 'view') {
         : 'Modifiez la recette pour compléter les valeurs des ingrédients.'}`
     }));
   }
+  // Fibres, sucres, sel : la pastille « … : inconnu » de chaque ingrédient indique lequel compléter.
   const secondary = SECONDARY_KEYS.filter((k) => calc.missing[k].length && ingredients.length);
   if (secondary.length) {
-    out.push(h('p', { class: 'hint' }, `${secondary.map((k) => NAMES[k]).join(', ').replace(/^./, (c) => c.toUpperCase())} : inconnu pour au moins un ingrédient, affiché « — ».`));
+    const several = secondary.length > 1;
+    out.push(banner({
+      kind: 'info',
+      title: `${secondary.map((k) => NAMES[k]).join(', ').replace(/^./, (c) => c.toUpperCase())} : « — » dans la recette`,
+      text: `${several ? 'Ces valeurs manquent' : 'Cette valeur manque'} pour au moins un ingrédient (pastille « inconnu »). Une somme des seules valeurs connues serait trop basse. ${context === 'edit'
+        ? 'Touchez l\'ingrédient, puis « Compléter les valeurs » : saisissez la valeur de l\'étiquette, même 0 g.'
+        : 'Pour compléter : Modifier, touchez l\'ingrédient, puis « Compléter les valeurs ».'}`
+    }));
   }
   for (const w of calc.warnings) {
     out.push(banner({ kind: 'warning', title: w.code === 'energy' ? 'Écart de calories supérieur à 10 %' : 'Poids final inhabituel', text: w.message }));
@@ -96,12 +104,14 @@ export function recipeNotices(ingredients, calc, context = 'view') {
 export function ingredientRow(ing, onClick = null) {
   const n = ingredientNutrients(ing);
   const incomplete = !ing.per100 || CORE_KEYS.some((k) => !isNum(ing.per100[k]));
+  const unknownSecondary = ing.per100 ? SECONDARY_KEYS.filter((k) => !isNum(ing.per100[k])).map((k) => NAMES[k]) : [];
   const qty = ing.inputUnit === 'portion'
     ? `${formatNumber(ing.inputValue, 2)} portion${ing.inputValue > 1 ? 's' : ''} (${formatQty(ing.quantity, ing.basis)})`
     : formatQty(ing.quantity, ing.basis);
   const flags = [
     ing.foodMissing ? h('span', { class: 'chip chip-inline' }, 'aliment supprimé') : null,
-    incomplete ? h('span', { class: 'chip chip-warning chip-inline' }, 'valeurs incomplètes') : null
+    incomplete ? h('span', { class: 'chip chip-warning chip-inline' }, 'valeurs incomplètes') : null,
+    !incomplete && unknownSecondary.length ? h('span', { class: 'chip chip-inline' }, `${unknownSecondary.join(', ')} : inconnu${unknownSecondary.length > 1 ? 's' : ''}`) : null
   ];
   const content = [
     h('span', { class: 'entry-main' },

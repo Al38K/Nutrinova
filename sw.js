@@ -2,7 +2,7 @@
  * À CHAQUE LIVRAISON : la valeur VERSION doit être identique à APP_VERSION dans js/config.js.
  * Changer VERSION déclenche la mise à jour de l'app sur l'iPhone.
  */
-const VERSION = '1.5.0';
+const VERSION = '1.5.1';
 const CACHE_PREFIX = 'nutrinova-';
 const CACHE_NAME = CACHE_PREFIX + VERSION;
 

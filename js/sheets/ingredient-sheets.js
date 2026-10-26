@@ -132,6 +132,17 @@ function ingredientWarning(per100, basis, onFix) {
       actions: onFix ? h('button', { type: 'button', class: 'btn btn-tinted', onclick: onFix }, iconEl('edit'), 'Corriger les valeurs') : null
     });
   }
+  // Fibres, sucres, sel : non bloquant, mais la recette affichera « — » pour ce nutriment.
+  const secondaryNames = { fiber: 'fibres', sugars: 'sucres', salt: 'sel' };
+  const unknown = Object.keys(secondaryNames).filter((k) => !isNum(per100[k]));
+  if (unknown.length) {
+    return banner({
+      kind: 'info',
+      title: `Inconnu : ${unknown.map((k) => secondaryNames[k]).join(', ')}`,
+      text: 'La recette affichera « — » pour ce nutriment. Si l\'étiquette indique une valeur (même 0 g), complétez l\'aliment.',
+      actions: fixBtn
+    });
+  }
   return null;
 }
 
