@@ -114,11 +114,12 @@ export function weightChart({ points, average, domain }) {
     guide.setAttribute('x2', x);
     mark.setAttribute('cx', x);
     mark.setAttribute('cy', py(p.weightKg));
-    readout.replaceChildren(
+    // replaceChildren écrirait « null » en texte : seuls les éléments présents sont passés.
+    readout.replaceChildren(...[
       h('span', { class: 'wchart-readout-date' }, formatDayLong(p.date)),
       h('span', { class: 'wchart-readout-value t-num' }, formatKg(p.weightKg)),
       a && a.count > 1 ? h('span', { class: 'wchart-readout-avg' }, `moyenne 7 j : ${formatKg(a.value)} (${a.count} pesées)`) : null
-    );
+    ].filter(Boolean));
   }
 
   // Zone tactile : toucher ou glisser horizontalement ; le défilement vertical de la page reste possible.

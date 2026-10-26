@@ -6,7 +6,7 @@ import { STORES, STORE_LABELS, SCHEMA_VERSION } from './schema.js';
 import { SETTING_DEFAULTS, THEMES, setSetting, applyTheme, mirrorTheme } from './settings.js';
 import { createFood, createRecipe, createJournalEntry, createGoal, createWeight } from './model.js';
 import { APP_NAME, APP_VERSION } from '../config.js';
-import { localDateKey, nowIso } from '../util/dates.js';
+import { localDateKey, nowIso, daysSince } from '../util/dates.js';
 
 export const BACKUP_FORMAT = 'nutrinova-backup';
 export const BACKUP_FORMAT_VERSION = 1;
@@ -16,10 +16,47 @@ export const BACKUP_STORES = Object.freeze([
   STORES.foods, STORES.recipes, STORES.journal, STORES.goals, STORES.weights, STORES.settings
 ]);
 
-// Réglages propres à cet appareil (diagnostic, date de sauvegarde, table Ciqual) ou secrets (clé API) : jamais exportés.
-const SETTINGS_EXCLUDED = new Set(['schemaVersion', 'firstLaunchAt', 'lastLaunchAt', 'launchCount', 'lastBackupAt', 'visionApiKey', 'ciqualVersion', 'ciqualMeta']);
+// Réglages propres à cet appareil (diagnostic, date de sauvegarde, table Ciqual) : jamais exportés.
+const SETTINGS_EXCLUDED = new Set(['schemaVersion', 'firstLaunchAt', 'lastLaunchAt', 'launchCount', 'lastBackupAt', 'ciqualVersion', 'ciqualMeta']);
 const IMPORTABLE_SETTINGS = Object.freeze(Object.keys(SETTING_DEFAULTS).filter((k) => !SETTINGS_EXCLUDED.has(k)));
 const WEIGH_KEYS = Object.freeze(['weighReminder', 'weighDay', 'weighTime']);
+
+// ---------- Rappel de sauvegarde (Phase 7) ----------
+
+/** Fréquences proposées, en jours ; 0 = rappel désactivé. */
+export const BACKUP_REMINDER_CHOICES = Object.freeze([0, 3, 7, 14, 30]);
+export const DEFAULT_BACKUP_REMINDER_DAYS = 7;
+// Tables dont le contenu justifie une sauvegarde (vos aliments seuls n'y suffisent pas : le cache Open Food Facts s'y trouve).
+const DATA_STORES = Object.freeze([STORES.journal, STORES.recipes, STORES.weights, STORES.goals]);
+
+/** Fréquence valide (jours) à partir du réglage ; null ou valeur inconnue → 7 jours. */
+export function reminderEvery(days) {
+  return Number.isInteger(days) && days >= 0 && days <= 365 ? days : DEFAULT_BACKUP_REMINDER_DAYS;
+}
+
+/** « Tous les 7 jours », « Désactivé ». */
+export function reminderEveryLabel(days) {
+  const every = reminderEvery(days);
+  return every === 0 ? 'Désactivé' : `Tous les ${every} jours`;
+}
+
+/**
+ * Faut-il rappeler de sauvegarder ? Oui si le rappel est actif, s'il y a des données à protéger,
+ * et si aucune sauvegarde n'a été faite depuis `every` jours (ou jamais).
+ * Renvoie { due, since (jours ou null si jamais), every }.
+ */
+export function backupReminderStatus({ lastBackupAt, reminderDays, dataCount, now = Date.now() }) {
+  const every = reminderEvery(reminderDays);
+  const since = daysSince(lastBackupAt, now);
+  const due = every > 0 && dataCount > 0 && (since === null || since >= every);
+  return { due, since, every };
+}
+
+/** Nombre d'éléments personnels (journal, recettes, pesées, objectifs) : 0 = rien à sauvegarder. */
+export async function countPersonalData() {
+  const counts = await db.countAll(DATA_STORES);
+  return Object.values(counts).reduce((a, b) => a + b, 0);
+}
 
 export class BackupError extends Error {
   constructor(message) {
@@ -174,6 +211,11 @@ const VALIDATORS = {
     if (rec.key === 'weighReminder' && typeof v !== 'boolean') throw new Error('rappel de pesée invalide.');
     if (rec.key === 'weighDay' && !(Number.isInteger(v) && v >= 0 && v <= 6)) throw new Error(`jour de pesée invalide « ${v} ».`);
     if (rec.key === 'weighTime' && !(typeof v === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(v))) throw new Error(`heure de pesée invalide « ${v} ».`);
+    // Rappel de sauvegarde (Phase 7) : vide dans une ancienne sauvegarde → réglage par défaut.
+    if (rec.key === 'backupReminderDays') {
+      if (v === null) return null;
+      if (!BACKUP_REMINDER_CHOICES.includes(v)) throw new Error(`fréquence du rappel de sauvegarde invalide « ${v} ».`);
+    }
     return { key: rec.key, value: v };
   }
 };

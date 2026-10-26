@@ -2,7 +2,7 @@
 // structure de la base, écritures/relectures, index, transactions, calculs, validations,
 // journal (ajout, modification, suppression), objectifs versionnés, contrôle des sauvegardes,
 // codes-barres, lecture des fiches Open Food Facts (exemples), vos aliments, la table Ciqual, les recettes,
-// les pesées, la moyenne mobile et le rappel de pesée (échéances, fichier calendrier).
+// les pesées, la moyenne mobile, le rappel de pesée (échéances, fichier calendrier) et le rappel de sauvegarde.
 // Les enregistrements de test sont datés de janvier 1900 et supprimés à la fin, même en cas d'échec.
 
 import * as db from './db.js';
@@ -12,7 +12,7 @@ import { scaleNutrients, sumNutrients, checkEnergyCoherence, normalizeNutrients,
 import { getSetting, THEMES } from './settings.js';
 import { addEntry, updateEntry, deleteEntry, restoreEntry, computeTotals, resolveQuantity } from './entries.js';
 import { getGoalForDate, saveGoal, goalTargets, goalWarnings } from './goals.js';
-import { buildBackup, validateBackup, BackupError, BACKUP_FORMAT, BACKUP_FORMAT_VERSION } from './backup.js';
+import { buildBackup, validateBackup, BackupError, BACKUP_FORMAT, BACKUP_FORMAT_VERSION, backupReminderStatus, reminderEvery } from './backup.js';
 import { checkBarcode, canonicalBarcode, expandUpcE } from './barcode.js';
 import { offToFood, offHitSummary } from './off.js';
 import { rankLocalFoods, queryWords, matchScore } from './search.js';
@@ -589,6 +589,28 @@ const TESTS = [
       }
       const tzLocal = vtimezone(Intl.DateTimeFormat().resolvedOptions().timeZone, 2026);
       return `fuseau de l'iPhone : ${Intl.DateTimeFormat().resolvedOptions().timeZone} (${tzLocal ? 'défini dans le fichier' : 'heure locale flottante'})`;
+    }
+  },
+  {
+    name: 'Rappel de sauvegarde : fréquence, données à protéger, import',
+    async run() {
+      const now = Date.parse('2026-10-26T12:00:00Z');
+      const daysAgo = (d) => new Date(now - d * 86400000).toISOString();
+      const st = (lastBackupAt, reminderDays, dataCount = 5) => backupReminderStatus({ lastBackupAt, reminderDays, dataCount, now });
+      assert(st(null, 7).due && st(null, 7).since === null, 'Jamais sauvegardé, des données : rappel');
+      assert(!st(null, 7, 0).due, 'Aucune donnée : pas de rappel');
+      assert(!st(daysAgo(6), 7).due, 'Sauvegarde il y a 6 jours, rappel à 7 : pas encore');
+      assert(st(daysAgo(7), 7).due && st(daysAgo(7), 7).since === 7, 'Sauvegarde il y a 7 jours : rappel');
+      assert(st(daysAgo(3), 3).due && !st(daysAgo(10), 14).due, 'Fréquences 3 et 14 jours');
+      assert(!st(daysAgo(100), 0).due, 'Rappel désactivé (0) : jamais de bannière');
+      assertEq([reminderEvery(null), reminderEvery(30), reminderEvery(-1)], [7, 30, 7], 'Réglage absent ou invalide → 7 jours');
+      const base = { format: BACKUP_FORMAT, formatVersion: BACKUP_FORMAT_VERSION, schemaVersion: SCHEMA_VERSION };
+      const ok = validateBackup({ ...base, data: { settings: [{ key: 'backupReminderDays', value: 14 }] } });
+      assertEq(ok.data.settings, [{ key: 'backupReminderDays', value: 14 }], 'Fréquence importée');
+      assertEq(validateBackup({ ...base, data: { settings: [{ key: 'backupReminderDays', value: null }] } }).data.settings.length, 0, 'Ancienne sauvegarde (vide) : réglage par défaut conservé');
+      expectThrow(() => validateBackup({ ...base, data: { settings: [{ key: 'backupReminderDays', value: 9 }] } }), BackupError, 'Fréquence inconnue refusée');
+      assertEq(validateBackup({ ...base, data: { settings: [{ key: 'visionApiKey', value: 'x' }] } }).data.settings.length, 0, 'Réglage inconnu ignoré');
+      return 'rappel à 7 jours par défaut, désactivable, contrôlé à l\'import';
     }
   },
   {

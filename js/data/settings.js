@@ -9,17 +9,14 @@ import { nowIso } from '../util/dates.js';
 export const SETTING_DEFAULTS = Object.freeze({
   schemaVersion: SCHEMA_VERSION,
   theme: 'system',            // 'system' | 'light' | 'dark'
-  lastBackupAt: null,         // Phase 7
-  backupReminderDays: null,   // Phase 7
+  lastBackupAt: null,         // date de la dernière sauvegarde (propre à l'appareil)
+  backupReminderDays: 7,      // Phase 7 : rappel de sauvegarde, en jours (0 = désactivé)
   weighReminder: true,        // Phase 5 : rappel de pesée actif
   weighDay: 0,                // Phase 5 : jour de pesée (0 = dimanche … 6 = samedi)
   weighTime: '10:00',         // Phase 5 : heure de pesée (HH:MM)
   offAttributionAck: false,   // Phase 3 : information Open Food Facts lue
   ciqualVersion: null,        // Phase 3 : version de la table Ciqual copiée dans la base
   ciqualMeta: null,           // Phase 3 : description de la table Ciqual (JSON)
-  photoConsentAt: null,       // Phase 6
-  visionProvider: null,       // Phase 6
-  visionApiKey: null,         // Phase 6
   firstLaunchAt: null,        // diagnostic de persistance
   lastLaunchAt: null,
   launchCount: 0

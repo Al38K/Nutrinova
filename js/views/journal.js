@@ -3,23 +3,22 @@
 // modification ou suppression.
 
 import { h, mount, setAppbar, installBanner, iconEl, ring, macroBar, banner, section, row } from '../ui.js';
-import { localDateKey, isDateKey, addDays, formatDayLong, dayTitle, daysSince } from '../util/dates.js';
+import { localDateKey, isDateKey, addDays, formatDayLong, dayTitle } from '../util/dates.js';
 import { formatNumber, formatKcal, isNum } from '../util/format.js';
 import { MEALS } from '../data/model.js';
 import { NUTRIENT_META } from '../data/nutrients.js';
-import { getEntriesForDate, computeTotals, countEntries } from '../data/entries.js';
+import { getEntriesForDate, computeTotals } from '../data/entries.js';
 import { getGoalForDate, goalTargets, goalMacroSummary } from '../data/goals.js';
 import { getSetting } from '../data/settings.js';
 import { entryRow, macroLine, remainingCaption, partialNote } from '../components/journal-parts.js';
 import { openFoodPicker } from '../sheets/food-picker.js';
 import { openEntrySheet } from '../sheets/entry-sheet.js';
 import { openExportSheet } from '../sheets/backup-sheets.js';
+import { backupReminderStatus, countPersonalData } from '../data/backup.js';
 import { latestWeight, listWeights } from '../data/weights.js';
 import { getReminder, reminderStatus } from '../data/reminder.js';
 import { openWeightSheet, weighBanner } from '../sheets/weight-sheets.js';
 import { refresh } from '../router.js';
-
-const DEFAULT_BACKUP_REMINDER_DAYS = 7;
 
 function dayNav(date, navigate) {
   const picker = h('input', {
@@ -108,27 +107,31 @@ function mealCard({ meal, date, data }) {
   );
 }
 
+/** Bannière de sauvegarde (aujourd'hui seulement), selon la fréquence choisie dans Réglages. */
 async function backupReminder(date, today) {
   if (date !== today) return null;
-  const [total, lastBackupAt, reminderDays] = await Promise.all([
-    countEntries(),
-    getSetting('lastBackupAt'),
-    getSetting('backupReminderDays')
-  ]);
-  if (!total) return null;
-  const every = Number.isInteger(reminderDays) && reminderDays > 0 ? reminderDays : DEFAULT_BACKUP_REMINDER_DAYS;
-  const since = daysSince(lastBackupAt);
-  if (since !== null && since < every) return null;
-  return banner({
-    kind: 'info',
-    title: since === null ? 'Aucune sauvegarde pour l\'instant' : `Dernière sauvegarde il y a ${formatNumber(since)} jours`,
-    text: 'Vos données ne sont que sur cet iPhone. Enregistrez une copie dans Fichiers (iCloud Drive).',
-    actions: h('button', {
-      type: 'button',
-      class: 'btn btn-tinted',
-      onclick: () => openExportSheet({ onDone: refresh })
-    }, 'Sauvegarder maintenant')
-  });
+  try {
+    const [dataCount, lastBackupAt, reminderDays] = await Promise.all([
+      countPersonalData(),
+      getSetting('lastBackupAt'),
+      getSetting('backupReminderDays')
+    ]);
+    const { due, since } = backupReminderStatus({ lastBackupAt, reminderDays, dataCount });
+    if (!due) return null;
+    return banner({
+      kind: 'info',
+      title: since === null ? 'Aucune sauvegarde pour l\'instant' : `Dernière sauvegarde il y a ${formatNumber(since)} jours`,
+      text: 'Vos données ne sont que sur cet iPhone. Enregistrez une copie dans Fichiers (iCloud Drive). Fréquence du rappel : Réglages › Rappel de sauvegarde.',
+      actions: h('button', {
+        type: 'button',
+        class: 'btn btn-tinted',
+        onclick: () => openExportSheet({ onDone: refresh })
+      }, 'Sauvegarder maintenant')
+    });
+  } catch (err) {
+    console.warn('Rappel de sauvegarde non évalué :', err);
+    return null;
+  }
 }
 
 /** Bannière de pesée (aujourd'hui seulement) : pesée prévue non saisie. Ne bloque jamais le Journal. */

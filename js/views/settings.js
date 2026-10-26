@@ -14,6 +14,7 @@ import { getServiceWorkerVersion } from '../pwa.js';
 import { formatBytes, formatNumber, formatKcal } from '../util/format.js';
 import { formatDateTime, localDateKey, daysSince } from '../util/dates.js';
 import { openExportSheet, handleImportFile } from '../sheets/backup-sheets.js';
+import { BACKUP_REMINDER_CHOICES, reminderEvery } from '../data/backup.js';
 import { openReminderSheet } from '../sheets/weight-sheets.js';
 import { getReminder, reminderLabel } from '../data/reminder.js';
 import { refresh } from '../router.js';
@@ -29,6 +30,13 @@ function persistLabel(p) {
   if (p === true) return 'Accordé';
   if (p === false) return 'Non accordé';
   return 'Non disponible';
+}
+
+function backupReminderHint(days) {
+  const every = reminderEvery(days);
+  return every === 0
+    ? 'Aucun rappel : pensez à exporter vos données régulièrement.'
+    : `Une bannière s'affiche dans le Journal quand la dernière sauvegarde date de ${every} jours ou plus.`;
 }
 
 function selfTestCard() {
@@ -128,6 +136,7 @@ export default {
     }, 'Lancer l\'autotest');
 
     const lastBackup = settings.lastBackupAt;
+    const reminderHint = h('p', { class: 'section-footer' }, backupReminderHint(settings.backupReminderDays));
     const since = daysSince(lastBackup);
     const fileInput = h('input', {
       type: 'file',
@@ -183,18 +192,37 @@ export default {
           chevron: true
         })]
       }),
-      section({
-        header: 'Sauvegarde',
-        rows: [
+      h('section', {},
+        h('h2', { class: 'section-header' }, 'Sauvegarde'),
+        h('div', { class: 'list' },
           row({
             title: 'Dernière sauvegarde',
             value: lastBackup ? `${formatDateTime(lastBackup)}${since !== null && since >= 1 ? ` (${formatNumber(since)} j)` : ''}` : 'Jamais'
           }),
           h('button', { type: 'button', class: 'row row-action', onclick: () => openExportSheet({ onDone: refresh }) }, 'Exporter mes données'),
           h('label', { class: 'row row-action' }, 'Importer une sauvegarde', fileInput)
-        ],
-        footer: 'L\'export crée un fichier JSON avec le journal, les aliments, les recettes, les objectifs, les pesées et les réglages. Enregistrez-le dans Fichiers (iCloud Drive). Un rappel s\'affiche dans le Journal après 7 jours sans sauvegarde.'
-      }),
+        ),
+        h('p', { class: 'section-footer' }, 'L\'export crée un fichier JSON avec le journal, les aliments, les recettes, les objectifs, les pesées et les réglages. Enregistrez-le dans Fichiers (iCloud Drive) : c\'est aussi lui qui permet de passer à un nouvel iPhone.')
+      ),
+      h('section', {},
+        h('h2', { class: 'section-header' }, 'Rappel de sauvegarde'),
+        h('div', { class: 'list', style: { padding: '8px' } },
+          segmented({
+            label: 'Fréquence du rappel de sauvegarde',
+            options: BACKUP_REMINDER_CHOICES.map((d) => ({ value: d, label: d === 0 ? 'Jamais' : `${d} j` })),
+            value: reminderEvery(settings.backupReminderDays),
+            onChange: async (value) => {
+              try {
+                await setSetting('backupReminderDays', value);
+                reminderHint.textContent = backupReminderHint(value);
+              } catch (err) {
+                toast(`Réglage non enregistré : ${err.message}`);
+              }
+            }
+          })
+        ),
+        reminderHint
+      ),
       appearance,
       section({
         header: 'Sources des données',
