@@ -2,7 +2,7 @@
 // Toute évolution future = SCHEMA_VERSION + 1 et une nouvelle entrée dans MIGRATIONS.
 // Les migrations existantes ne sont JAMAIS modifiées une fois livrées.
 
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 export const STORES = Object.freeze({
   foods: 'foods',
@@ -11,6 +11,7 @@ export const STORES = Object.freeze({
   journal: 'journal',
   goals: 'goals',
   weights: 'weights',
+  activities: 'activities',
   settings: 'settings'
 });
 
@@ -21,6 +22,7 @@ export const STORE_LABELS = Object.freeze({
   journal: 'Entrées du journal',
   goals: 'Objectifs',
   weights: 'Pesées',
+  activities: 'Activités',
   settings: 'Réglages'
 });
 
@@ -69,6 +71,13 @@ export const SCHEMA = Object.freeze({
     keyPath: 'date',
     indexes: {}
   },
+  // v2 (v1.6.0) : calories dépensées saisies à la main (sport, activité).
+  activities: {
+    keyPath: 'id',
+    indexes: {
+      date: { keyPath: 'date' }
+    }
+  },
   settings: {
     keyPath: 'key',
     indexes: {}
@@ -83,12 +92,19 @@ function createStoreFromSchema(db, name) {
   }
 }
 
+// Tables créées par chaque version (la v1 ne doit pas créer les tables ajoutées plus tard).
+const V1_STORES = ['foods', 'ciqual', 'recipes', 'journal', 'goals', 'weights', 'settings'];
+
 const MIGRATIONS = {
-  // v1 : création de toutes les tables.
+  // v1 : création des tables d'origine.
   1(db) {
-    for (const name of Object.keys(SCHEMA)) {
+    for (const name of V1_STORES) {
       if (!db.objectStoreNames.contains(name)) createStoreFromSchema(db, name);
     }
+  },
+  // v2 (v1.6.0) : table des activités. Les données existantes ne sont pas touchées.
+  2(db) {
+    if (!db.objectStoreNames.contains('activities')) createStoreFromSchema(db, 'activities');
   }
 };
 

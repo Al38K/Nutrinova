@@ -9,6 +9,7 @@ import { NUTRIENT_META } from '../data/nutrients.js';
 import { getEntriesForDate, computeTotals } from '../data/entries.js';
 import { getGoalForDate, goalTargets, goalPercents, goalMacroSummary } from '../data/goals.js';
 import { partialNote } from '../components/journal-parts.js';
+import { getActivitiesForDate, burnedKcal, kcalBudget } from '../data/activities.js';
 import { energySplit } from '../components/energy-split.js';
 
 const MAIN_KEYS = ['kcal', 'protein', 'carbs', 'fat'];
@@ -95,11 +96,18 @@ export default {
     const date = isDateKey(params[0]) ? params[0] : localDateKey();
     setAppbar({ title: 'Détail du jour', leading: backButton(`#/journal/${date}`, 'Journal') });
 
-    const [entries, goal] = await Promise.all([getEntriesForDate(date), getGoalForDate(date)]);
+    const [entries, goal, activities] = await Promise.all([
+      getEntriesForDate(date),
+      getGoalForDate(date),
+      getActivitiesForDate(date).catch(() => [])
+    ]);
+    const burned = burnedKcal(activities);
     const totals = computeTotals(entries);
     totals.date = date;
     const day = totals.day;
-    const targets = goalTargets(goal);
+    // L'activité augmente l'objectif calorique du jour (pas les macros).
+    const targets = { ...goalTargets(goal) };
+    if (isNum(targets.kcal)) targets.kcal = kcalBudget(targets.kcal, burned);
     const anyIncomplete = [...MAIN_KEYS, ...OTHER_KEYS].some((k) => mark(day, k));
     const title = dayTitle(date);
 
@@ -111,7 +119,10 @@ export default {
       h('section', { class: 'card' },
         h('h2', { class: 'card-title' }, 'Bilan du jour'),
         balanceTable(day, targets),
-        day.count ? partialNote(day.missing.kcal) : h('p', { class: 'hint', style: { marginTop: '8px' } }, 'Aucun aliment saisi ce jour-là.')
+        day.count ? partialNote(day.missing.kcal) : h('p', { class: 'hint', style: { marginTop: '8px' } }, 'Aucun aliment saisi ce jour-là.'),
+        burned > 0
+          ? h('p', { class: 'hint', style: { marginTop: '8px' } }, `Activité : ${formatNumber(burned)} kcal dépensées (${activities.map((a) => a.name).join(', ')}), ajoutées à l'objectif calorique${goal ? ` de ${formatNumber(goal.kcal)} kcal` : ''}.`)
+          : null
       ),
       h('section', { class: 'card' },
         h('h2', { class: 'card-title' }, 'Répartition de l\'énergie'),

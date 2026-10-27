@@ -39,6 +39,9 @@ export const ICONS = {
   keyboard: wrap('<rect x="2.5" y="6" width="19" height="12" rx="2.5"/><path d="M6 10h.01M9.5 10h.01M13 10h.01M16.5 10h.01M7.5 14h9" stroke-width="2.2"/>'),
   external: wrap('<path d="M14 4h6v6"/><path d="M20 4l-9 9"/><path d="M18 14v4.5A1.5 1.5 0 0 1 16.5 20h-11A1.5 1.5 0 0 1 4 18.5v-11A1.5 1.5 0 0 1 5.5 6H10"/>'),
   bell: wrap('<path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 2H4.5z"/><path d="M10 21h4"/>'),
+  flame: wrap('<path d="M12 21c-3.9 0-6.5-2.6-6.5-6.2 0-3.1 2-5.2 3.6-7 .6 1.5 1.5 2.6 2.7 3.1C11.5 7.6 12.6 5 14.6 3c.3 2.8 1.6 4.6 2.8 6.3 1 1.4 1.6 3 1.6 5 0 4-3 6.7-7 6.7z"/><path d="M12 21c-1.6 0-2.8-1.2-2.8-2.9 0-1.6 1.3-2.7 2.8-4.3 1.5 1.6 2.8 2.7 2.8 4.3 0 1.7-1.2 2.9-2.8 2.9z"/>'),
+  checkPlain: wrap('<path d="M5 12.5l4.5 4.5L19 7.5"/>', 'stroke-width="2.6"'),
+  chevronDown: wrap('<path d="M5 9l7 7 7-7"/>', 'stroke-width="2.4"'),
   zoom: wrap('<circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l5 5M10.5 8v5M8 10.5h5"/>')
 };
 

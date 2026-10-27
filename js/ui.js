@@ -101,16 +101,32 @@ export function row({ title, subtitle, value, iconName, iconBg, href, onClick, c
 
 // ---------- Bannières, états vides ----------
 
-export function banner({ kind = 'info', title, text, actions }) {
+/**
+ * Bannière. onClose facultatif : affiche une croix ; la bannière disparaît puis onClose() est appelé.
+ */
+export function banner({ kind = 'info', title, text, actions, onClose }) {
   const iconName = kind === 'warning' ? 'warning' : kind === 'danger' ? 'cross' : kind === 'success' ? 'check' : 'info';
-  return h('div', { class: `banner ${kind !== 'info' ? `banner-${kind}` : ''}`, role: kind === 'danger' ? 'alert' : 'status' },
+  const el = h('div', { class: `banner ${kind !== 'info' ? `banner-${kind}` : ''} ${onClose ? 'banner-closable' : ''}`, role: kind === 'danger' ? 'alert' : 'status' },
     iconEl(iconName),
     h('div', { class: 'banner-body' },
       title ? h('p', { class: 'banner-title' }, title) : null,
       text ? h('p', {}, text) : null,
       actions || null
-    )
+    ),
+    onClose
+      ? h('button', {
+          type: 'button',
+          class: 'banner-close',
+          'aria-label': `Fermer${title ? ` : ${title}` : ''}`,
+          onclick: () => {
+            el.classList.add('is-leaving');
+            setTimeout(() => el.remove(), 200);
+            onClose();
+          }
+        }, iconEl('close'))
+      : null
   );
+  return el;
 }
 
 export function emptyState({ iconName, title, text, action }) {

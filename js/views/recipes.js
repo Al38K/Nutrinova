@@ -1,17 +1,49 @@
 // Onglet Recettes : liste des recettes, recherche, création, ajout rapide d'une portion au journal.
 
-import { h, mount, setAppbar, iconEl, emptyState, banner } from '../ui.js';
+import { h, mount, setAppbar, iconEl, emptyState, banner, toast } from '../ui.js';
 import { formatKcal, formatNumber, isNum } from '../util/format.js';
 import { localDateKey } from '../util/dates.js';
-import { listRecipes, filterRecipes, CORE_KEYS } from '../data/recipes.js';
+import { listRecipes, filterRecipes, deleteRecipe, restoreRecipe, CORE_KEYS } from '../data/recipes.js';
 import { suggestMeal } from '../data/entries.js';
 import { foodRow, group } from '../components/food-search.js';
 import { quickAdd } from '../sheets/entry-sheet.js';
 import { hasPendingDraft } from './recipe-edit.js';
+import { swipeToDelete } from '../components/swipe.js';
+import { refresh } from '../router.js';
 
 // Recherche conservée pendant la session.
 const memo = { query: '' };
 const SEARCH_FROM = 6; // la barre de recherche apparaît à partir de 6 recettes
+
+/**
+ * Supprime une recette (et son aliment) avec « Annuler ». Les entrées du journal gardent leurs valeurs.
+ */
+async function removeRecipe(recipe) {
+  let removed;
+  try {
+    removed = await deleteRecipe(recipe.id);
+  } catch (err) {
+    toast(`Suppression impossible : ${err.message}`);
+    refresh();
+    return;
+  }
+  refresh();
+  toast(`Recette supprimée : ${recipe.name}`, {
+    duration: 6000,
+    action: {
+      label: 'Annuler',
+      onClick: async () => {
+        try {
+          if (removed) await restoreRecipe(removed);
+          toast('Recette restaurée');
+        } catch (err) {
+          toast(`Annulation impossible : ${err.message}`);
+        }
+        refresh();
+      }
+    }
+  });
+}
 
 function subtitle({ recipe, calc }) {
   const parts = [`${formatNumber(recipe.servings)} portion${recipe.servings > 1 ? 's' : ''}`];
@@ -69,13 +101,13 @@ export default {
         results.replaceChildren(h('p', { class: 'hint' }, `Aucune recette ne correspond à « ${memo.query.trim()} ».`));
         return;
       }
-      results.replaceChildren(group(`Vos recettes (${list.length})`, list.map((b) => foodRow({
+      results.replaceChildren(group(`Vos recettes (${list.length})`, list.map((b) => swipeToDelete(foodRow({
         title: b.recipe.name,
         badge: b.food && b.food.favorite ? iconEl('starFill', 'row-star') : null,
         sub: subtitle(b),
         onMain: () => navigate(`recipe/${b.recipe.id}`),
         side: plusBtn(b)
-      }))));
+      }), { label: b.recipe.name, onDelete: () => removeRecipe(b.recipe) }))));
     };
 
     let searchbar = null;
@@ -110,7 +142,7 @@ export default {
       searchbar,
       h('button', { type: 'button', class: 'btn btn-primary btn-block', onclick: create }, iconEl('plus'), 'Nouvelle recette'),
       results,
-      h('p', { class: 'hint' }, '« + » ajoute 1 portion aujourd\'hui, au repas proposé selon l\'heure. Vous pouvez la déplacer ou changer la quantité ensuite dans le Journal.')
+      h('p', { class: 'hint' }, '« + » ajoute 1 portion aujourd\'hui, au repas proposé selon l\'heure. Glissez une recette vers la gauche pour la supprimer : les entrées déjà dans le journal sont conservées.')
     );
     paint();
   }

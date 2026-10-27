@@ -2,7 +2,7 @@
 // contenu de la base, autotest, à propos.
 
 import { h, mount, setAppbar, section, row, segmented, installBanner, iconEl, toast } from '../ui.js';
-import { getAllSettings, setSetting, applyTheme } from '../data/settings.js';
+import { getAllSettings, setSetting, applyAppearance, ACCENTS } from '../data/settings.js';
 import { countAll, getAllByIndex } from '../data/db.js';
 import { ensureCiqual, getCiqualState } from '../data/ciqual.js';
 import { OFF_SITE } from '../data/off.js';
@@ -98,24 +98,34 @@ export default {
     const standalone = isStandalone();
     const test = selfTestCard();
 
+    const STYLE_OPTIONS = [{ value: 'classic', label: 'Classique' }, { value: 'glass', label: 'Verre' }];
+    const save = async (key, value) => {
+      applyAppearance({ [key]: value }); // effet immédiat, l'enregistrement suit
+      try {
+        await setSetting(key, value);
+      } catch (err) {
+        toast(`Réglage non enregistré : ${err.message}`);
+      }
+    };
+    const swatches = ACCENTS.map((a) => h('button', {
+      type: 'button',
+      class: 'accent-swatch',
+      'aria-pressed': String(a.id === settings.accent),
+      'aria-label': `Couleur ${a.label}`,
+      onclick: (e) => {
+        for (const b of swatches) b.setAttribute('aria-pressed', String(b === e.currentTarget));
+        save('accent', a.id);
+      }
+    }, h('span', { class: 'accent-dot', style: { background: a.swatch } }, iconEl('checkPlain')), h('span', {}, a.label)));
+
     const appearance = h('section', {},
       h('h2', { class: 'section-header' }, 'Apparence'),
-      h('div', { class: 'list', style: { padding: '8px' } },
-        segmented({
-          label: 'Thème',
-          options: THEME_OPTIONS,
-          value: settings.theme,
-          onChange: async (value) => {
-            applyTheme(value); // effet immédiat, l'enregistrement suit
-            try {
-              await setSetting('theme', value);
-            } catch (err) {
-              toast(`Thème non enregistré : ${err.message}`);
-            }
-          }
-        })
+      h('div', { class: 'list stack', style: { padding: '8px' } },
+        segmented({ label: 'Thème', options: THEME_OPTIONS, value: settings.theme, onChange: (v) => save('theme', v) }),
+        segmented({ label: 'Style', options: STYLE_OPTIONS, value: settings.style, onChange: (v) => save('style', v) }),
+        h('div', { class: 'accent-picker', role: 'group', 'aria-label': 'Couleur de l\'app' }, swatches)
       ),
-      h('p', { class: 'section-footer' }, '« Système » suit le mode clair/sombre de l\'iPhone.')
+      h('p', { class: 'section-footer' }, '« Système » suit le mode clair/sombre de l\'iPhone. « Verre » : surfaces translucides et barre d\'onglets flottante, inspirées du style Liquid Glass d\'iOS. La couleur s\'applique au bandeau, aux boutons et à l\'anneau.')
     );
 
     const storageRows = [
@@ -202,7 +212,7 @@ export default {
           h('button', { type: 'button', class: 'row row-action', onclick: () => openExportSheet({ onDone: refresh }) }, 'Exporter mes données'),
           h('label', { class: 'row row-action' }, 'Importer une sauvegarde', fileInput)
         ),
-        h('p', { class: 'section-footer' }, 'L\'export crée un fichier JSON avec le journal, les aliments, les recettes, les objectifs, les pesées et les réglages. Enregistrez-le dans Fichiers (iCloud Drive) : c\'est aussi lui qui permet de passer à un nouvel iPhone.')
+        h('p', { class: 'section-footer' }, 'L\'export crée un fichier JSON avec le journal, les aliments, les recettes, les objectifs, les pesées, les activités et les réglages. Enregistrez-le dans Fichiers (iCloud Drive) : c\'est aussi lui qui permet de passer à un nouvel iPhone.')
       ),
       h('section', {},
         h('h2', { class: 'section-header' }, 'Rappel de sauvegarde'),

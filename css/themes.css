@@ -1,0 +1,368 @@
+/* nutrinova — apparence (v1.6.0) : couleurs de l'app et style « Verre ».
+ * Couleurs : attribut data-accent sur <html> (absent = Émeraude, couleur d'origine).
+ * Style : attribut data-style="glass" sur <html> (absent = Classique).
+ * Contrastes vérifiés : texte de couleur sur fond clair ≥ 5:1, texte blanc sur bandeau ≥ 5:1,
+ * texte de couleur sur fond sombre ≥ 6,9:1 (WCAG AA).
+ */
+
+/* =====================================================================
+   Couleurs de l'app
+   ===================================================================== */
+:root { --glass-2: #9BE3D3; } /* seconde teinte du fond « Verre » (Émeraude) */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-accent]):not([data-theme="light"]) { --glass-2: #0E7490; }
+}
+:root:not([data-accent])[data-theme="dark"] { --glass-2: #0E7490; }
+
+/* blue */
+:root[data-accent="blue"] {
+  --brand: #0A63C9;
+  --brand-strong: #08519F;
+  --brand-soft: #E3EEFB;
+  --info-soft: #E3EEFB;
+  --header-bg: #0A63C9;
+  --kcal: #0A63C9;
+  --glass-2: #7FC4FF;
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-accent="blue"]:not([data-theme="light"]) {
+    --brand: #5AA9FF;
+    --brand-strong: #86C0FF;
+    --brand-soft: rgba(90, 169, 255, 0.16);
+    --info-soft: rgba(90, 169, 255, 0.14);
+    --on-brand: #101014;
+    --header-bg: #0B3D7A;
+    --kcal: #5AA9FF;
+    --glass-2: #1D4ED8;
+  }
+}
+:root[data-accent="blue"][data-theme="dark"] {
+  --brand: #5AA9FF;
+  --brand-strong: #86C0FF;
+  --brand-soft: rgba(90, 169, 255, 0.16);
+  --info-soft: rgba(90, 169, 255, 0.14);
+  --on-brand: #101014;
+  --header-bg: #0B3D7A;
+  --kcal: #5AA9FF;
+  --glass-2: #1D4ED8;
+}
+
+/* indigo */
+:root[data-accent="indigo"] {
+  --brand: #5145CD;
+  --brand-strong: #4136A8;
+  --brand-soft: #ECEAFB;
+  --info-soft: #ECEAFB;
+  --header-bg: #5145CD;
+  --kcal: #5145CD;
+  --glass-2: #C4A8FF;
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-accent="indigo"]:not([data-theme="light"]) {
+    --brand: #A69EFF;
+    --brand-strong: #C2BCFF;
+    --brand-soft: rgba(166, 158, 255, 0.16);
+    --info-soft: rgba(166, 158, 255, 0.14);
+    --on-brand: #101014;
+    --header-bg: #352A8C;
+    --kcal: #A69EFF;
+    --glass-2: #6D28D9;
+  }
+}
+:root[data-accent="indigo"][data-theme="dark"] {
+  --brand: #A69EFF;
+  --brand-strong: #C2BCFF;
+  --brand-soft: rgba(166, 158, 255, 0.16);
+  --info-soft: rgba(166, 158, 255, 0.14);
+  --on-brand: #101014;
+  --header-bg: #352A8C;
+  --kcal: #A69EFF;
+  --glass-2: #6D28D9;
+}
+
+/* berry */
+:root[data-accent="berry"] {
+  --brand: #B8235A;
+  --brand-strong: #981B4A;
+  --brand-soft: #FBE6EE;
+  --info-soft: #FBE6EE;
+  --header-bg: #B8235A;
+  --kcal: #B8235A;
+  --glass-2: #FFB38A;
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-accent="berry"]:not([data-theme="light"]) {
+    --brand: #FF7DA8;
+    --brand-strong: #FFA3C2;
+    --brand-soft: rgba(255, 125, 168, 0.16);
+    --info-soft: rgba(255, 125, 168, 0.14);
+    --on-brand: #101014;
+    --header-bg: #7A1640;
+    --kcal: #FF7DA8;
+    --glass-2: #9D174D;
+  }
+}
+:root[data-accent="berry"][data-theme="dark"] {
+  --brand: #FF7DA8;
+  --brand-strong: #FFA3C2;
+  --brand-soft: rgba(255, 125, 168, 0.16);
+  --info-soft: rgba(255, 125, 168, 0.14);
+  --on-brand: #101014;
+  --header-bg: #7A1640;
+  --kcal: #FF7DA8;
+  --glass-2: #9D174D;
+}
+
+/* graphite */
+:root[data-accent="graphite"] {
+  --brand: #3A3A3C;
+  --brand-strong: #2C2C2E;
+  --brand-soft: #EBEBEF;
+  --info-soft: #EBEBEF;
+  --header-bg: #3A3A3C;
+  --kcal: #3A3A3C;
+  --glass-2: #B8C4D6;
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-accent="graphite"]:not([data-theme="light"]) {
+    --brand: #D1D1D6;
+    --brand-strong: #E5E5EA;
+    --brand-soft: rgba(209, 209, 214, 0.16);
+    --info-soft: rgba(209, 209, 214, 0.14);
+    --on-brand: #101014;
+    --header-bg: #2C2C2E;
+    --kcal: #D1D1D6;
+    --glass-2: #3F3F46;
+  }
+}
+:root[data-accent="graphite"][data-theme="dark"] {
+  --brand: #D1D1D6;
+  --brand-strong: #E5E5EA;
+  --brand-soft: rgba(209, 209, 214, 0.16);
+  --info-soft: rgba(209, 209, 214, 0.14);
+  --on-brand: #101014;
+  --header-bg: #2C2C2E;
+  --kcal: #D1D1D6;
+  --glass-2: #3F3F46;
+}
+
+/* =====================================================================
+   Style « Verre » (inspiré de Liquid Glass) : fond coloré en dégradé,
+   surfaces translucides et floutées, barre d'onglets flottante.
+   ===================================================================== */
+:root[data-style="glass"] {
+  --glass-bg: rgba(255, 255, 255, 0.62);
+  --glass-bg-strong: rgba(250, 250, 253, 0.86);
+  --glass-bar: rgba(255, 255, 255, 0.76);
+  --glass-border: rgba(255, 255, 255, 0.78);
+  --glass-edge: rgba(15, 23, 42, 0.06);
+  --glass-shadow: 0 10px 30px rgba(31, 38, 64, 0.10), 0 1px 2px rgba(31, 38, 64, 0.06);
+  --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.85);
+  --glass-blur: saturate(180%) blur(24px);
+  --glass-base-1: #F6F7FB;
+  --glass-base-2: #ECEFF6;
+  --surface-pressed: rgba(120, 120, 140, 0.16);
+  --separator: rgba(60, 60, 67, 0.16);
+  --track: rgba(120, 120, 140, 0.16);
+  --surface-2: rgba(255, 255, 255, 0.55);
+  --radius-l: 22px;
+  --radius-m: 16px;
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-style="glass"]:not([data-theme="light"]) {
+    --glass-bg: rgba(38, 38, 44, 0.55);
+    --glass-bg-strong: rgba(28, 28, 32, 0.88);
+    --glass-bar: rgba(34, 34, 40, 0.78);
+    --glass-border: rgba(255, 255, 255, 0.12);
+    --glass-edge: rgba(0, 0, 0, 0.4);
+    --glass-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+    --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.10);
+    --glass-base-1: #07080C;
+    --glass-base-2: #111318;
+    --surface-pressed: rgba(255, 255, 255, 0.10);
+    --separator: rgba(255, 255, 255, 0.10);
+    --track: rgba(255, 255, 255, 0.12);
+    --surface-2: rgba(255, 255, 255, 0.07);
+  }
+}
+:root[data-style="glass"][data-theme="dark"] {
+  --glass-bg: rgba(38, 38, 44, 0.55);
+  --glass-bg-strong: rgba(28, 28, 32, 0.88);
+  --glass-bar: rgba(34, 34, 40, 0.78);
+  --glass-border: rgba(255, 255, 255, 0.12);
+  --glass-edge: rgba(0, 0, 0, 0.4);
+  --glass-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.10);
+  --glass-base-1: #07080C;
+  --glass-base-2: #111318;
+  --surface-pressed: rgba(255, 255, 255, 0.10);
+  --separator: rgba(255, 255, 255, 0.10);
+  --track: rgba(255, 255, 255, 0.12);
+  --surface-2: rgba(255, 255, 255, 0.07);
+}
+
+/* Fond : dégradé fixe aux couleurs de l'app (pseudo-élément fixe : Safari iOS ignore background-attachment: fixed). */
+:root[data-style="glass"] .app-bg-top { display: none; }
+:root[data-style="glass"] #app { background: transparent; }
+:root[data-style="glass"] body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(90% 55% at 0% 0%, color-mix(in srgb, var(--brand) 34%, transparent) 0%, transparent 70%),
+    radial-gradient(80% 50% at 100% 35%, color-mix(in srgb, var(--glass-2) 45%, transparent) 0%, transparent 70%),
+    radial-gradient(90% 60% at 20% 100%, color-mix(in srgb, var(--brand) 22%, transparent) 0%, transparent 70%),
+    linear-gradient(180deg, var(--glass-base-1), var(--glass-base-2));
+}
+
+/* Surfaces en verre */
+:root[data-style="glass"] .card,
+:root[data-style="glass"] .list,
+:root[data-style="glass"] .pick-list,
+:root[data-style="glass"] .daynav,
+:root[data-style="glass"] .searchbar,
+:root[data-style="glass"] .entry-preview {
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border: 0.5px solid var(--glass-border);
+  box-shadow: var(--glass-shadow), var(--glass-highlight);
+}
+:root[data-style="glass"] .swipe-front { background: transparent; }
+:root[data-style="glass"] .segmented {
+  background: var(--track);
+  border-radius: var(--radius-pill);
+}
+:root[data-style="glass"] .segmented button { border-radius: var(--radius-pill); }
+:root[data-style="glass"] .segmented button[aria-pressed="true"] {
+  background: var(--glass-bg-strong);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.10), var(--glass-highlight);
+}
+:root[data-style="glass"] .btn { border-radius: var(--radius-pill); }
+:root[data-style="glass"] .btn-primary { box-shadow: 0 6px 18px color-mix(in srgb, var(--brand) 35%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.25); }
+:root[data-style="glass"] .btn-tinted {
+  background: color-mix(in srgb, var(--brand) 14%, var(--glass-bg));
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+}
+:root[data-style="glass"] .input-wrap { background: var(--surface-2); border-color: var(--glass-border); }
+:root[data-style="glass"] .banner {
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border: 0.5px solid var(--glass-border);
+}
+
+/* Bandeau supérieur : verre teinté (le texte blanc et la barre d'état restent lisibles). */
+:root[data-style="glass"] .appbar {
+  background: color-mix(in srgb, var(--header-bg) 82%, transparent);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(20px);
+  box-shadow: 0 0.5px 0 rgba(255, 255, 255, 0.18) inset, 0 6px 20px rgba(0, 0, 0, 0.08);
+}
+
+/* Bandeau calorique : verre teinté avec reflet */
+:root[data-style="glass"] .hero {
+  position: relative;
+  overflow: hidden;
+  border-radius: 28px;
+  background:
+    linear-gradient(160deg, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0) 45%),
+    color-mix(in srgb, var(--header-bg) 94%, transparent);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border: 0.5px solid rgba(255, 255, 255, 0.28);
+  box-shadow: 0 14px 36px color-mix(in srgb, var(--header-bg) 30%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.30);
+}
+
+/* Barre d'onglets flottante en capsule */
+:root[data-style="glass"] .tabbar {
+  left: calc(12px + env(safe-area-inset-left, 0px));
+  right: calc(12px + env(safe-area-inset-right, 0px));
+  bottom: max(8px, calc(env(safe-area-inset-bottom, 0px) - 12px));
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 6px;
+  border-radius: var(--radius-pill);
+  border: 0.5px solid var(--glass-border);
+  background: var(--glass-bar);
+  -webkit-backdrop-filter: saturate(180%) blur(28px);
+  backdrop-filter: saturate(180%) blur(28px);
+  box-shadow: var(--glass-shadow), var(--glass-highlight);
+}
+:root[data-style="glass"] .tab {
+  min-height: 52px;
+  border-radius: var(--radius-pill);
+  padding-top: 2px;
+}
+:root[data-style="glass"] .tab[aria-current="page"] {
+  background: color-mix(in srgb, var(--brand) 14%, transparent);
+}
+:root[data-style="glass"] .toast-host {
+  bottom: calc(max(8px, calc(env(safe-area-inset-bottom, 0px) - 12px)) + 72px);
+}
+
+/* Feuilles modales en verre */
+:root[data-style="glass"] .sheet {
+  background: var(--glass-bg-strong);
+  -webkit-backdrop-filter: saturate(180%) blur(30px);
+  backdrop-filter: saturate(180%) blur(30px);
+  border-top: 0.5px solid var(--glass-border);
+  border-radius: 28px 28px 0 0;
+}
+:root[data-style="glass"] .sheet .searchbar,
+:root[data-style="glass"] .sheet .pick-list,
+:root[data-style="glass"] .sheet .card,
+:root[data-style="glass"] .sheet .list { background: rgba(255, 255, 255, 0.5); }
+@media (prefers-color-scheme: dark) {
+  :root[data-style="glass"]:not([data-theme="light"]) .sheet .searchbar,
+  :root[data-style="glass"]:not([data-theme="light"]) .sheet .pick-list,
+  :root[data-style="glass"]:not([data-theme="light"]) .sheet .card,
+  :root[data-style="glass"]:not([data-theme="light"]) .sheet .list { background: rgba(255, 255, 255, 0.06); }
+}
+:root[data-style="glass"][data-theme="dark"] .sheet .searchbar,
+:root[data-style="glass"][data-theme="dark"] .sheet .pick-list,
+:root[data-style="glass"][data-theme="dark"] .sheet .card,
+:root[data-style="glass"][data-theme="dark"] .sheet .list { background: rgba(255, 255, 255, 0.06); }
+
+/* Accessibilité : « Réduire la transparence » (Réglages iOS › Accessibilité) rend les surfaces opaques. */
+@media (prefers-reduced-transparency: reduce) {
+  :root[data-style="glass"] {
+    --glass-bg: var(--surface);
+    --glass-bg-strong: var(--bg);
+    --glass-bar: var(--surface);
+  }
+  :root[data-style="glass"] .appbar { background: var(--header-bg); }
+}
+
+/* =====================================================================
+   Choix de la couleur (Réglages)
+   ===================================================================== */
+.accent-picker { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--sp-2); padding: var(--sp-3) var(--sp-3) var(--sp-2); }
+.accent-swatch {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-width: 56px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--label-2);
+  font-size: var(--fs-caption);
+}
+.accent-dot {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  color: #fff;
+  box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.12);
+}
+.accent-dot svg { width: 22px; height: 22px; opacity: 0; }
+.accent-swatch[aria-pressed="true"] { color: var(--label); font-weight: var(--fw-semibold); }
+.accent-swatch[aria-pressed="true"] .accent-dot { box-shadow: 0 0 0 3px var(--bg), 0 0 0 5px var(--label-3); }
+.accent-swatch[aria-pressed="true"] .accent-dot svg { opacity: 1; }
+:root[data-style="glass"] .accent-swatch[aria-pressed="true"] .accent-dot { box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.6), 0 0 0 5px var(--label-3); }

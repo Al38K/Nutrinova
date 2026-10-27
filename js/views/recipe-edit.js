@@ -9,6 +9,7 @@ import { getRecipeBundle, refreshIngredients, ingredientForEditing, computeRecip
 import { formatQty } from '../components/journal-parts.js';
 import { recipeTable, weightsLine, recipeNotices, ingredientRow } from '../components/recipe-parts.js';
 import { openIngredientPicker, openIngredientSheet } from '../sheets/ingredient-sheets.js';
+import { swipeToDelete } from '../components/swipe.js';
 
 // Brouillons par clé ('new' ou identifiant de la recette).
 const drafts = new Map();
@@ -170,12 +171,17 @@ export default {
     const ingHeader = h('h2', { class: 'section-header' });
     const ingList = h('div', { class: 'list' });
     const ingEmpty = h('p', { class: 'hint' }, 'Aucun ingrédient pour l\'instant. Pesez chaque ingrédient, de préférence cru.');
+    const ingSwipeHint = h('p', { class: 'section-footer' }, 'Touchez un ingrédient pour le modifier. Glissez-le vers la gauche pour le retirer.');
 
     function paintIngredients() {
       ingHeader.textContent = `Ingrédients (${draft.ingredients.length})`;
-      ingList.replaceChildren(...draft.ingredients.map((ing, i) => ingredientRow(ing, () => editIngredient(i))));
+      ingList.replaceChildren(...draft.ingredients.map((ing, i) => swipeToDelete(
+        ingredientRow(ing, () => editIngredient(i)),
+        { label: ing.name || 'l\'ingrédient', onDelete: () => removeIngredient(ing) }
+      )));
       ingList.hidden = !draft.ingredients.length;
       ingEmpty.hidden = draft.ingredients.length > 0;
+      ingSwipeHint.hidden = !draft.ingredients.length;
     }
 
     const changed = () => {
@@ -207,20 +213,24 @@ export default {
           if (idx >= 0) draft.ingredients[idx] = ing;
           changed();
         },
-        onRemove: () => {
-          const idx = draft.ingredients.indexOf(current);
-          if (idx < 0) return;
-          draft.ingredients.splice(idx, 1);
-          changed();
-          toast('Ingrédient retiré', {
-            action: {
-              label: 'Annuler',
-              onClick: () => {
-                draft.ingredients.splice(Math.min(idx, draft.ingredients.length), 0, current);
-                changed();
-              }
-            }
-          });
+        onRemove: () => removeIngredient(current)
+      });
+    }
+
+    /** Retire un ingrédient (feuille de l'ingrédient ou glisser vers la gauche), avec « Annuler ». */
+    function removeIngredient(current) {
+      const idx = draft.ingredients.indexOf(current);
+      if (idx < 0) return;
+      draft.ingredients.splice(idx, 1);
+      changed();
+      toast(`Retiré : ${current.name || 'ingrédient'}`, {
+        duration: 5000,
+        action: {
+          label: 'Annuler',
+          onClick: () => {
+            draft.ingredients.splice(Math.min(idx, draft.ingredients.length), 0, current);
+            changed();
+          }
         }
       });
     }
@@ -358,6 +368,7 @@ export default {
       h('section', {},
         ingHeader,
         ingList,
+        ingSwipeHint,
         ingEmpty,
         h('button', { type: 'button', class: 'btn btn-tinted btn-lg btn-block ingredient-add', onclick: addIngredient }, iconEl('plus'), 'Ajouter un ingrédient')
       ),

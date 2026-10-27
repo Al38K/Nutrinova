@@ -24,17 +24,20 @@ export function macroLine(n) {
   return `P ${formatGrams(n.protein)} · G ${formatGrams(n.carbs)} · L ${formatGrams(n.fat)}`;
 }
 
-/** Ligne d'entrée du journal (bouton) : nom, quantité, macros, kcal. */
-export function entryRow(entry, onClick) {
+/**
+ * Ligne d'entrée du journal (bouton) : nom, quantité, macros, kcal.
+ * compact : nom et kcal seulement (cartes repas du Journal) ; le détail est dans la vue Repas.
+ */
+export function entryRow(entry, onClick, { compact = false } = {}) {
   const n = entryNutrients(entry);
   return h('button', {
     type: 'button',
-    class: 'entry-row',
+    class: `entry-row${compact ? ' entry-row-compact' : ''}`,
     onclick: () => onClick(entry)
   },
     h('span', { class: 'entry-main' },
       h('span', { class: 'entry-name' }, entry.nameSnapshot),
-      h('span', { class: 'entry-sub' }, `${quantityLabel(entry)} · ${macroLine(n)}`)
+      compact ? null : h('span', { class: 'entry-sub' }, `${quantityLabel(entry)} · ${macroLine(n)}`)
     ),
     h('span', { class: 'entry-kcal t-num' }, formatKcal(n.kcal))
   );

@@ -2,15 +2,15 @@
 // barres de macros (restant), 4 cartes repas. Tout se met à jour après chaque ajout,
 // modification ou suppression.
 
-import { h, mount, setAppbar, installBanner, iconEl, ring, macroBar, banner, section, row } from '../ui.js';
+import { h, mount, setAppbar, installBanner, iconEl, ring, macroBar, banner, section, row, toast } from '../ui.js';
 import { localDateKey, isDateKey, addDays, formatDayLong, dayTitle } from '../util/dates.js';
-import { formatNumber, formatKcal, isNum } from '../util/format.js';
+import { formatNumber, formatKcal, formatNutrient, isNum } from '../util/format.js';
 import { MEALS } from '../data/model.js';
 import { NUTRIENT_META } from '../data/nutrients.js';
 import { getEntriesForDate, computeTotals } from '../data/entries.js';
 import { getGoalForDate, goalTargets, goalMacroSummary } from '../data/goals.js';
-import { getSetting } from '../data/settings.js';
-import { entryRow, macroLine, remainingCaption, partialNote } from '../components/journal-parts.js';
+import { getSetting, setSetting } from '../data/settings.js';
+import { entryRow, remainingCaption, partialNote } from '../components/journal-parts.js';
 import { openFoodPicker } from '../sheets/food-picker.js';
 import { openEntrySheet } from '../sheets/entry-sheet.js';
 import { openExportSheet } from '../sheets/backup-sheets.js';
@@ -18,6 +18,9 @@ import { backupReminderStatus, countPersonalData } from '../data/backup.js';
 import { latestWeight, listWeights } from '../data/weights.js';
 import { getReminder, reminderStatus } from '../data/reminder.js';
 import { openWeightSheet, weighBanner } from '../sheets/weight-sheets.js';
+import { getActivitiesForDate, burnedKcal, kcalBudget } from '../data/activities.js';
+import { openActivitySheet, removeActivity } from '../sheets/activity-sheet.js';
+import { swipeToDelete } from '../components/swipe.js';
 import { refresh } from '../router.js';
 
 function dayNav(date, navigate) {
@@ -42,8 +45,13 @@ function dayNav(date, navigate) {
   );
 }
 
-function hero(date, consumed, target) {
+/**
+ * Bandeau calorique : consommées · anneau (restantes) · dépensées.
+ * Restant = objectif + calories dépensées (activité) − consommées.
+ */
+function hero(date, consumed, target, burned) {
   const hasGoal = isNum(target);
+  const budget = kcalBudget(target, burned);
   let centerNumber;
   let centerLabel;
   let ringValue = consumed;
@@ -52,44 +60,128 @@ function hero(date, consumed, target) {
     centerLabel = hasGoal ? 'kcal restantes' : 'kcal consommées';
     ringValue = null;
   } else if (hasGoal) {
-    const r = Math.round(target - consumed);
+    const r = Math.round(budget - consumed);
     centerNumber = formatNumber(Math.abs(r));
     centerLabel = r >= 0 ? 'kcal restantes' : 'kcal en trop';
   } else {
     centerNumber = formatNumber(consumed);
     centerLabel = 'kcal consommées';
   }
-  return h('a', { class: 'hero', href: `#/day/${date}`, 'aria-label': 'Détail du jour' },
+  const goalLine = hasGoal
+    ? (burned > 0
+        ? `Objectif ${formatNumber(target)} + ${formatNumber(burned)} kcal d'activité = ${formatNumber(budget)} kcal`
+        : `Objectif ${formatNumber(target)} kcal`)
+    : 'Aucun objectif pour ce jour';
+  return h('a', { class: 'hero', href: `#/day/${date}`, 'aria-label': `Détail du jour. ${goalLine}` },
     h('div', { class: 'hero-stat' },
       h('span', { class: 'hero-num' }, formatNumber(consumed)),
       h('span', { class: 'hero-lbl' }, 'Consommées')
     ),
-    ring({ value: ringValue, goal: target, centerNumber, centerLabel, size: 148, stroke: 12, onBrand: true }),
+    ring({ value: ringValue, goal: budget, centerNumber, centerLabel, size: 148, stroke: 12, onBrand: true }),
     h('div', { class: 'hero-stat' },
-      h('span', { class: 'hero-num' }, hasGoal ? formatNumber(target) : '—'),
-      h('span', { class: 'hero-lbl' }, 'Objectif')
-    )
+      h('span', { class: 'hero-num' }, formatNumber(burned)),
+      h('span', { class: 'hero-lbl' }, 'Dépensées')
+    ),
+    h('p', { class: 'hero-foot' }, goalLine)
   );
 }
 
-function macrosCard(values, targets) {
-  return h('section', { class: 'card', 'aria-label': 'Macronutriments' },
+// Carte des macros dépliée ou non : mémorisée sur cet iPhone (simple confort d'affichage).
+const MACROS_OPEN_KEY = 'nutrinova.macrosOpen';
+function readMacrosOpen() {
+  try { return localStorage.getItem(MACROS_OPEN_KEY) === '1'; } catch { return false; }
+}
+function writeMacrosOpen(open) {
+  try { localStorage.setItem(MACROS_OPEN_KEY, open ? '1' : '0'); } catch { /* sans conséquence */ }
+}
+
+const EXTRA_KEYS = ['fiber', 'sugars', 'salt', 'alcohol'];
+
+/**
+ * Carte des macros : protéines, glucides, lipides (restant), puis, en dépliant,
+ * fibres, sucres, sel et alcool consommés (sans objectif).
+ */
+function macrosCard(day, targets) {
+  const { values, missing } = day;
+  let open = readMacrosOpen();
+  const extra = h('dl', { class: 'kv macro-extra', id: 'macro-extra' },
+    EXTRA_KEYS.flatMap((k) => [
+      h('dt', { class: k === 'sugars' ? 'kv-sub' : '' }, NUTRIENT_META[k].label),
+      h('dd', {}, `${formatNutrient(k, values[k])}${missing[k] && isNum(values[k]) ? ' *' : ''}`)
+    ])
+  );
+  const anyPartial = EXTRA_KEYS.some((k) => missing[k] && isNum(values[k]));
+  const note = anyPartial ? h('p', { class: 'hint macro-extra-note' }, '* Total partiel : au moins un aliment n\'a pas cette valeur.') : null;
+  const label = h('span', {});
+  const chevron = iconEl('chevronDown', 'macro-toggle-chevron');
+  const toggle = h('button', {
+    type: 'button',
+    class: 'macro-toggle',
+    'aria-controls': 'macro-extra',
+    onclick: () => { open = !open; writeMacrosOpen(open); sync(); }
+  }, label, chevron);
+  const card = h('section', { class: 'card macros-card', 'aria-label': 'Macronutriments' },
     ['protein', 'carbs', 'fat'].map((k) => macroBar({
       kind: k,
       label: NUTRIENT_META[k].label,
       value: values[k],
       goal: targets[k],
       caption: remainingCaption(values[k], targets[k])
-    }))
+    })),
+    extra,
+    note,
+    toggle
+  );
+  function sync() {
+    extra.hidden = !open;
+    if (note) note.hidden = !open;
+    toggle.setAttribute('aria-expanded', String(open));
+    label.textContent = open ? 'Moins de nutriments' : 'Fibres, sucres, sel, alcool';
+    card.classList.toggle('is-open', open);
+  }
+  sync();
+  return card;
+}
+
+/** Carte Activité : calories dépensées saisies à la main, ajoutées à l'objectif du jour. */
+function activityCard(date, activities, burned) {
+  const add = () => openActivitySheet({ date, onDone: refresh });
+  const head = h('div', { class: 'meal-head' },
+    h('div', { class: 'meal-title-link' },
+      h('span', { class: 'meal-title' }, iconEl('flame', 'activity-icon'), 'Activité'),
+      activities.length ? null : h('span', { class: 'meal-sub' }, 'Calories dépensées, ajoutées à l\'objectif')
+    ),
+    activities.length ? h('span', { class: 'meal-kcal t-num' }, `${formatNumber(burned)} kcal`) : null,
+    h('button', { type: 'button', class: 'btn btn-tinted btn-icon meal-add', 'aria-label': 'Ajouter une activité', onclick: add }, iconEl('plus'))
+  );
+  return h('section', { class: 'card meal-card activity-card', 'aria-label': 'Activité' },
+    head,
+    activities.length
+      ? h('div', { class: 'meal-entries' }, activities.map((a) => swipeToDelete(
+          h('button', {
+            type: 'button',
+            class: 'entry-row entry-row-compact',
+            onclick: () => openActivitySheet({ activity: a, onDone: refresh })
+          },
+            h('span', { class: 'entry-main' }, h('span', { class: 'entry-name' }, a.name)),
+            h('span', { class: 'entry-kcal t-num' }, `${formatNumber(a.kcal)} kcal`)
+          ),
+          { label: a.name, onDelete: () => removeActivity(a, refresh) }
+        )))
+      : null
   );
 }
 
+/**
+ * Carte repas : titre, kcal du repas, bouton +, et la liste des aliments (nom et kcal seulement).
+ * Toucher le titre ouvre la vue Repas : quantités, macros et nutriments de chaque aliment.
+ */
 function mealCard({ meal, date, data }) {
   const hasEntries = data.entries.length > 0;
   const head = h('div', { class: 'meal-head' },
-    h('a', { class: 'meal-title-link', href: `#/meal/${date}/${meal.id}` },
+    h('a', { class: 'meal-title-link', href: `#/meal/${date}/${meal.id}`, 'aria-label': `${meal.label} : détail du repas` },
       h('span', { class: 'meal-title' }, meal.label, iconEl('chevronRight', 'meal-chevron')),
-      h('span', { class: 'meal-sub' }, hasEntries ? macroLine(data.values) : 'Aucun aliment')
+      hasEntries ? null : h('span', { class: 'meal-sub' }, 'Aucun aliment')
     ),
     hasEntries ? h('span', { class: 'meal-kcal t-num' }, formatKcal(data.values.kcal)) : null,
     h('button', {
@@ -102,7 +194,7 @@ function mealCard({ meal, date, data }) {
   return h('section', { class: 'card meal-card', 'aria-label': meal.label },
     head,
     hasEntries
-      ? h('div', { class: 'meal-entries' }, data.entries.map((e) => entryRow(e, (entry) => openEntrySheet({ entry, onDone: refresh }))))
+      ? h('div', { class: 'meal-entries' }, data.entries.map((e) => entryRow(e, (entry) => openEntrySheet({ entry, onDone: refresh }), { compact: true })))
       : null
   );
 }
@@ -111,12 +203,13 @@ function mealCard({ meal, date, data }) {
 async function backupReminder(date, today) {
   if (date !== today) return null;
   try {
-    const [dataCount, lastBackupAt, reminderDays] = await Promise.all([
+    const [dataCount, lastBackupAt, reminderDays, hiddenOn] = await Promise.all([
       countPersonalData(),
       getSetting('lastBackupAt'),
-      getSetting('backupReminderDays')
+      getSetting('backupReminderDays'),
+      getSetting('backupBannerHiddenOn')
     ]);
-    const { due, since } = backupReminderStatus({ lastBackupAt, reminderDays, dataCount });
+    const { due, since } = backupReminderStatus({ lastBackupAt, reminderDays, dataCount, hiddenOn });
     if (!due) return null;
     return banner({
       kind: 'info',
@@ -126,7 +219,11 @@ async function backupReminder(date, today) {
         type: 'button',
         class: 'btn btn-tinted',
         onclick: () => openExportSheet({ onDone: refresh })
-      }, 'Sauvegarder maintenant')
+      }, 'Sauvegarder maintenant'),
+      onClose: () => {
+        setSetting('backupBannerHiddenOn', today).catch((err) => console.warn('Fermeture non enregistrée :', err));
+        toast('Rappel masqué jusqu\'à demain');
+      }
     });
   } catch (err) {
     console.warn('Rappel de sauvegarde non évalué :', err);
@@ -163,12 +260,14 @@ export default {
         : h('a', { class: 'appbar-btn', href: '#/goals', 'aria-label': 'Objectifs' }, iconEl('target'))
     });
 
-    const [entries, goal, reminder, weighing] = await Promise.all([
+    const [entries, goal, reminder, weighing, activities] = await Promise.all([
       getEntriesForDate(date),
       getGoalForDate(date),
       backupReminder(date, today),
-      weighReminder(date, today)
+      weighReminder(date, today),
+      getActivitiesForDate(date).catch((err) => { console.warn('Activités non lues :', err); return []; })
     ]);
+    const burned = burnedKcal(activities);
     const totals = computeTotals(entries);
     const targets = goalTargets(goal);
     const day = totals.day;
@@ -178,16 +277,17 @@ export default {
       weighing,
       reminder,
       dayNav(date, navigate),
-      hero(date, day.values.kcal, targets.kcal),
+      hero(date, day.values.kcal, targets.kcal, burned),
       day.count ? partialNote(day.missing.kcal) : null,
       goal
-        ? macrosCard(day.values, targets)
+        ? macrosCard(day, targets)
         : h('section', { class: 'card stack' },
             h('p', { class: 't-headline' }, 'Aucun objectif pour ce jour'),
             h('p', { class: 'hint' }, 'Définissez vos calories et vos macros pour suivre ce qu\'il vous reste à chaque repas.'),
             h('a', { class: 'btn btn-primary btn-block', href: '#/goals' }, iconEl('target'), 'Définir mes objectifs')
           ),
       MEALS.map((meal) => mealCard({ meal, date, data: totals.meals[meal.id] })),
+      activityCard(date, activities, burned),
       section({
         rows: [
           row({ title: 'Détail du jour', subtitle: 'Tous les nutriments, répartition par repas', iconName: 'chart', href: `#/day/${date}` }),

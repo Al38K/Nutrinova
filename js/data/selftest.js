@@ -7,9 +7,10 @@
 
 import * as db from './db.js';
 import { SCHEMA, SCHEMA_VERSION, STORES } from './schema.js';
-import { createFood, createJournalEntry, createRecipe, createGoal, createWeight, createCiqualItem, ValidationError } from './model.js';
+import { createFood, createJournalEntry, createRecipe, createGoal, createWeight, createCiqualItem, createActivity, ValidationError } from './model.js';
+import { saveActivity, getActivitiesForDate, deleteActivity, restoreActivity, burnedKcal, kcalBudget } from './activities.js';
 import { scaleNutrients, sumNutrients, checkEnergyCoherence, normalizeNutrients, NutrientError } from './nutrients.js';
-import { getSetting, THEMES } from './settings.js';
+import { getSetting, THEMES, STYLES, ACCENT_IDS } from './settings.js';
 import { addEntry, updateEntry, deleteEntry, restoreEntry, computeTotals, resolveQuantity } from './entries.js';
 import { getGoalForDate, saveGoal, goalTargets, goalWarnings } from './goals.js';
 import { buildBackup, validateBackup, BackupError, BACKUP_FORMAT, BACKUP_FORMAT_VERSION, backupReminderStatus, reminderEvery } from './backup.js';
@@ -91,6 +92,11 @@ async function cleanup() {
     tx.objectStore(STORES.weights).delete(TEST_DATE_2);
     tx.objectStore(STORES.weights).delete(TEST_DATE_3);
     tx.objectStore(STORES.ciqual).delete(TEST_IDS.ciqual);
+    const acts = tx.objectStore(STORES.activities);
+    for (const d of [TEST_DATE, TEST_DATE_2]) {
+      const keys = await db.req(acts.index('date').getAllKeys(d));
+      for (const k of keys) acts.delete(k);
+    }
   });
 }
 
@@ -109,7 +115,7 @@ function testFood(overrides = {}) {
 
 const TESTS = [
   {
-    name: 'Structure de la base (7 tables, clés, index)',
+    name: 'Structure de la base (tables, clés, index)',
     async run() {
       const info = await db.describe();
       assertEq(info.version, SCHEMA_VERSION, 'Version de la base');
@@ -122,6 +128,7 @@ const TESTS = [
           assertEq(real.indexes[idx].keyPath, idef.keyPath, `Index ${store}.${idx}`);
         }
       }
+      assertEq(Object.keys(info.stores).length, Object.keys(SCHEMA).length, 'Nombre de tables');
       return `${Object.keys(info.stores).length} tables, schéma v${info.version}`;
     }
   },
@@ -207,13 +214,15 @@ const TESTS = [
     async run() {
       const theme = await getSetting('theme');
       assert(THEMES.includes(theme), `Thème invalide : ${theme}`);
+      const [style, accent] = await Promise.all([getSetting('style'), getSetting('accent')]);
+      assert(STYLES.includes(style) && ACCENT_IDS.includes(accent), `Apparence invalide : ${style} / ${accent}`);
       const sv = await getSetting('schemaVersion');
       assertEq(sv, SCHEMA_VERSION, 'Version du schéma enregistrée');
       let threw = false;
       try { await getSetting('cleInconnue'); } catch { threw = true; }
       assert(threw, 'Une clé inconnue doit être refusée');
       const launches = await getSetting('launchCount');
-      return `thème « ${theme} », ${launches} ouverture(s)`;
+      return `thème « ${theme} », style « ${style} », couleur « ${accent} », ${launches} ouverture(s)`;
     }
   },
   {
@@ -611,6 +620,35 @@ const TESTS = [
       expectThrow(() => validateBackup({ ...base, data: { settings: [{ key: 'backupReminderDays', value: 9 }] } }), BackupError, 'Fréquence inconnue refusée');
       assertEq(validateBackup({ ...base, data: { settings: [{ key: 'visionApiKey', value: 'x' }] } }).data.settings.length, 0, 'Réglage inconnu ignoré');
       return 'rappel à 7 jours par défaut, désactivable, contrôlé à l\'import';
+    }
+  },
+  {
+    name: 'Activité : calories dépensées, objectif du jour, sauvegarde',
+    async run() {
+      const a = await saveActivity({ date: TEST_DATE, name: 'Marche', kcal: 250 });
+      const b = await saveActivity({ date: TEST_DATE, name: '', kcal: 120.5 });
+      assertEq(b.name, 'Activité', 'Nom vide → « Activité »');
+      const list = await getActivitiesForDate(TEST_DATE);
+      // Deux saisies dans la même milliseconde : ordre libre, on compare sans tenir compte de l'ordre.
+      assertEq(list.map((x) => x.kcal).sort((p, q) => p - q), [120.5, 250], 'Activités du jour');
+      assert(approx(burnedKcal(list), 370.5), 'Total dépensé = 370,5 kcal');
+      assertEq(burnedKcal([]), 0, 'Aucune activité = 0');
+      assertEq([kcalBudget(2000, 370.5), kcalBudget(null, 300)], [2370.5, null], 'Objectif + activité ; sans objectif : rien');
+      const edited = await saveActivity({ date: TEST_DATE, name: 'Marche rapide', kcal: 300 }, a);
+      assertEq([edited.id, edited.createdAt, edited.kcal], [a.id, a.createdAt, 300], 'Modification : même activité');
+      const removed = await deleteActivity(b.id);
+      assertEq((await getActivitiesForDate(TEST_DATE)).length, 1, 'Activité supprimée');
+      await restoreActivity(removed);
+      assertEq((await getActivitiesForDate(TEST_DATE)).length, 2, 'Suppression annulée');
+      expectThrow(() => createActivity({ date: TEST_DATE, kcal: 0 }), ValidationError, '0 kcal refusé');
+      expectThrow(() => createActivity({ date: TEST_DATE, kcal: 6000 }), ValidationError, 'Plus de 5 000 kcal refusé');
+      expectThrow(() => createActivity({ date: TEST_DATE }), ValidationError, 'Calories absentes refusées');
+      const base = { format: BACKUP_FORMAT, formatVersion: BACKUP_FORMAT_VERSION, schemaVersion: SCHEMA_VERSION };
+      const ok = validateBackup({ ...base, data: { activities: [edited] } });
+      assertEq(ok.counts.activities, 1, 'Activité reconnue dans une sauvegarde');
+      expectThrow(() => validateBackup({ ...base, data: { activities: [{ ...edited, kcal: -5 }] } }), BackupError, 'Activité invalide refusée à l\'import');
+      assertEq(validateBackup({ ...base, schemaVersion: 1, data: { journal: [] } }).counts.activities, 0, 'Ancienne sauvegarde (sans activités) acceptée');
+      return '250 + 120,5 kcal, objectif 2 000 → 2 370,5 kcal disponibles';
     }
   },
   {

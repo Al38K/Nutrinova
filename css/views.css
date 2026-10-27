@@ -476,3 +476,118 @@ label.row:active { background: var(--surface-pressed); }
 }
 .input[type="time"], .input[type="date"] { -webkit-appearance: none; appearance: none; text-align: left; }
 .input[type="time"]::-webkit-date-and-time-value, .input[type="date"]::-webkit-date-and-time-value { text-align: left; }
+
+/* =====================================================================
+   v1.6.0 — glisser pour supprimer, activité, macros dépliables, thèmes
+   ===================================================================== */
+
+/* ---------- Glisser pour supprimer ---------- */
+.swipe {
+  position: relative;
+  overflow: hidden;
+}
+.swipe + .swipe::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: var(--sp-4);
+  right: 0;
+  z-index: 2;
+  border-top: 0.5px solid var(--separator);
+  pointer-events: none;
+}
+.swipe-front {
+  position: relative;
+  z-index: 1;
+  background: var(--surface);
+  touch-action: pan-y;
+  will-change: transform;
+}
+.swipe.is-animating .swipe-front { transition: transform 220ms var(--ease); }
+.swipe.is-animating .swipe-action { transition: width 220ms var(--ease); }
+.swipe-front > .entry-row::before, .swipe-front > .pick-row::before { display: none; }
+.swipe-action {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 0;
+  visibility: hidden;
+  overflow: hidden;
+  white-space: nowrap;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 0;
+  border: 0;
+  background: var(--danger);
+  color: #fff;
+  font-size: var(--fs-footnote);
+  font-weight: var(--fw-semibold);
+}
+.swipe-action svg { width: 22px; height: 22px; }
+.swipe.is-removing { transition: opacity 180ms var(--ease); opacity: 0.4; }
+.swipe-action { background: #D92D20; } /* texte blanc lisible en clair comme en sombre (4,8:1) */
+
+/* ---------- Cartes repas compactes ---------- */
+.entry-row-compact { min-height: var(--touch); padding-top: 8px; padding-bottom: 8px; }
+.entry-row-compact .entry-name { font-size: var(--fs-callout); }
+
+/* ---------- Bannière avec croix ---------- */
+.banner-closable { position: relative; padding-right: 48px; }
+.banner-close {
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: grid;
+  place-items: center;
+  width: var(--touch);
+  height: var(--touch);
+  border: 0;
+  border-radius: var(--radius-m);
+  background: none;
+  color: var(--label-2);
+}
+.banner-close svg { width: 18px; height: 18px; }
+.banner-close:active { opacity: 0.5; }
+.banner.is-leaving { opacity: 0; transform: scale(0.98); transition: all 200ms var(--ease); }
+
+/* ---------- Bandeau calorique : ligne de l'objectif ---------- */
+.hero-foot {
+  grid-column: 1 / -1;
+  margin-top: var(--sp-1);
+  text-align: center;
+  font-size: var(--fs-footnote);
+  color: var(--header-fg-muted);
+}
+
+/* ---------- Carte des macros dépliable ---------- */
+.macro-extra { margin-top: var(--sp-4); padding-top: var(--sp-3); border-top: 0.5px solid var(--separator); }
+.macro-extra .kv-sub { padding-left: var(--sp-3); }
+.macro-extra-note { margin-top: var(--sp-2); }
+.macro-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-1);
+  width: calc(100% + 2 * var(--sp-4));
+  min-height: var(--touch);
+  margin: var(--sp-2) calc(-1 * var(--sp-4)) calc(-1 * var(--sp-4));
+  border: 0;
+  border-top: 0.5px solid var(--separator);
+  border-radius: 0 0 var(--radius-l) var(--radius-l);
+  background: none;
+  color: var(--brand);
+  font-size: var(--fs-subhead);
+  font-weight: var(--fw-medium);
+}
+.macro-toggle:active { background: var(--surface-pressed); }
+.macro-toggle-chevron { width: 16px; height: 16px; transition: transform var(--dur) var(--ease); }
+.macros-card.is-open .macro-toggle-chevron { transform: rotate(180deg); }
+
+/* ---------- Carte Activité ---------- */
+.activity-icon { width: 18px; height: 18px; margin-right: 6px; color: var(--warning); }
+.chip-btn { min-height: 36px; padding: 4px 14px; border: 0; font-size: var(--fs-subhead); }
+.chip-btn:active { opacity: 0.6; }

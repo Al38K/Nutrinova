@@ -36,7 +36,8 @@ export const LIMITS = Object.freeze({
   weightMaxKg: 500,
   servingsMax: 100,
   ingredientsMax: 60,
-  cookedWeightMax: 100000 // g, poids final d'une recette
+  cookedWeightMax: 100000, // g, poids final d'une recette
+  activityKcalMax: 5000   // kcal dépensées pour une activité
 });
 
 export class ValidationError extends Error {
@@ -320,4 +321,22 @@ export function assertWeightRange(weightKg) {
     throw new ValidationError('weightKg', `Poids : entre ${LIMITS.weightMinKg} et ${LIMITS.weightMaxKg} kg.`);
   }
   return weightKg;
+}
+
+// ---------- Activités (v1.6.0) ----------
+
+/**
+ * Calories dépensées saisies à la main (montre, appareil de sport…). Jamais estimées par l'app.
+ * Elles s'ajoutent à l'objectif calorique du jour.
+ */
+export function createActivity(input = {}) {
+  const now = nowIso();
+  return {
+    id: input.id || newId(),
+    date: dateKey('date', input.date),
+    name: cleanLabel(input.name, 80) || 'Activité',
+    kcal: requiredPositive('kcal', input.kcal, 'Calories dépensées', LIMITS.activityKcalMax),
+    createdAt: input.createdAt || now,
+    updatedAt: now
+  };
 }

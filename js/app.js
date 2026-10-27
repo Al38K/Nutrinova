@@ -1,7 +1,7 @@
 // Point d'entrée : thème, base locale, persistance, service worker, navigation.
 
 import { openDb } from './data/db.js';
-import { getSetting, applyTheme, mirrorTheme, recordLaunch } from './data/settings.js';
+import { getSetting, applyAppearance, recordLaunch } from './data/settings.js';
 import { requestPersistence } from './data/storage.js';
 import { registerServiceWorker } from './pwa.js';
 import { startRouter } from './router.js';
@@ -43,9 +43,8 @@ async function boot() {
   }
 
   try {
-    const theme = await getSetting('theme');
-    applyTheme(theme);
-    mirrorTheme(theme);
+    const [theme, style, accent] = await Promise.all([getSetting('theme'), getSetting('style'), getSetting('accent')]);
+    applyAppearance({ theme, style, accent }, { mirror: true });
   } catch (err) {
     console.warn('Thème non lu :', err);
   }

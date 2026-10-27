@@ -20,12 +20,17 @@
   <link rel="stylesheet" href="css/base.css">
   <link rel="stylesheet" href="css/components.css">
   <link rel="stylesheet" href="css/views.css">
+  <link rel="stylesheet" href="css/themes.css">
   <script>
-    // Applique le thème choisi avant le premier affichage (évite un flash clair/sombre).
+    // Applique l'apparence choisie avant le premier affichage (évite un flash de couleur).
     try {
+      var d = document.documentElement;
       var t = localStorage.getItem('nutrinova.theme');
-      if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
-    } catch (e) { /* stockage indisponible : thème système */ }
+      if (t === 'light' || t === 'dark') d.setAttribute('data-theme', t);
+      if (localStorage.getItem('nutrinova.style') === 'glass') d.setAttribute('data-style', 'glass');
+      var a = localStorage.getItem('nutrinova.accent');
+      if (a && /^(blue|indigo|berry|graphite)$/.test(a)) d.setAttribute('data-accent', a);
+    } catch (e) { /* stockage indisponible : apparence par défaut */ }
   </script>
   <script type="module" src="js/app.js"></script>
 </head>
