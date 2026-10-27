@@ -212,7 +212,7 @@ export default {
           h('button', { type: 'button', class: 'row row-action', onclick: () => openExportSheet({ onDone: refresh }) }, 'Exporter mes données'),
           h('label', { class: 'row row-action' }, 'Importer une sauvegarde', fileInput)
         ),
-        h('p', { class: 'section-footer' }, 'L\'export crée un fichier JSON avec le journal, les aliments, les recettes, les objectifs, les pesées, les activités et les réglages. Enregistrez-le dans Fichiers (iCloud Drive) : c\'est aussi lui qui permet de passer à un nouvel iPhone.')
+        h('p', { class: 'section-footer' }, 'L\'export crée un fichier JSON avec le journal, les aliments, les recettes, les objectifs, les pesées, les mensurations, les activités et les réglages. Enregistrez-le dans Fichiers (iCloud Drive) : c\'est aussi lui qui permet de passer à un nouvel iPhone.')
       ),
       h('section', {},
         h('h2', { class: 'section-header' }, 'Rappel de sauvegarde'),

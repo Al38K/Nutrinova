@@ -2,7 +2,7 @@
  * À CHAQUE LIVRAISON : la valeur VERSION doit être identique à APP_VERSION dans js/config.js.
  * Changer VERSION déclenche la mise à jour de l'app sur l'iPhone.
  */
-const VERSION = '1.6.0';
+const VERSION = '1.7.0';
 const CACHE_PREFIX = 'nutrinova-';
 const CACHE_NAME = CACHE_PREFIX + VERSION;
 
@@ -44,12 +44,16 @@ const APP_FILES = [
   './js/data/weights.js',
   './js/data/reminder.js',
   './js/data/activities.js',
+  './js/data/measurements.js',
+  './js/data/progress.js',
   './js/components/journal-parts.js',
   './js/components/energy-split.js',
   './js/components/food-search.js',
   './js/components/recipe-parts.js',
   './js/components/weight-chart.js',
   './js/components/swipe.js',
+  './js/components/measures-view.js',
+  './js/components/kcal-chart.js',
   './js/sheets/entry-sheet.js',
   './js/sheets/food-form.js',
   './js/sheets/food-picker.js',
@@ -59,6 +63,7 @@ const APP_FILES = [
   './js/sheets/ingredient-sheets.js',
   './js/sheets/weight-sheets.js',
   './js/sheets/activity-sheet.js',
+  './js/sheets/measure-sheets.js',
   './js/scanner/scanner.js',
   './js/views/journal.js',
   './js/views/foods.js',
@@ -66,6 +71,7 @@ const APP_FILES = [
   './js/views/recipe.js',
   './js/views/recipe-edit.js',
   './js/views/weight.js',
+  './js/views/progress.js',
   './js/views/settings.js',
   './js/views/design.js',
   './js/views/meal.js',

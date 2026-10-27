@@ -17,6 +17,7 @@ export const SETTING_DEFAULTS = Object.freeze({
   weighReminder: true,        // Phase 5 : rappel de pesée actif
   weighDay: 0,                // Phase 5 : jour de pesée (0 = dimanche … 6 = samedi)
   weighTime: '10:00',         // Phase 5 : heure de pesée (HH:MM)
+  measuresTracked: 'waist,hips,chest,arm,thigh', // v1.7 : mensurations suivies (identifiants séparés par des virgules)
   offAttributionAck: false,   // Phase 3 : information Open Food Facts lue
   ciqualVersion: null,        // Phase 3 : version de la table Ciqual copiée dans la base
   ciqualMeta: null,           // Phase 3 : description de la table Ciqual (JSON)

@@ -5,7 +5,7 @@
 // La suppression elle-même (et son « Annuler ») est faite par l'appelant dans onDelete.
 // Le bouton « Supprimer » reste un vrai bouton : accessible avec VoiceOver sans geste.
 
-import { h, iconEl } from '../ui.js';
+import { h, iconEl, toast } from '../ui.js';
 
 const ACTION_W = 88;        // largeur du bouton révélé (px)
 const START_SLOP = 8;       // déplacement minimal avant de décider horizontal / vertical
@@ -143,4 +143,36 @@ export function swipeToDelete(content, { label, onDelete }) {
   }, { capture: true });
 
   return root;
+}
+
+/**
+ * Suppression avec « Annuler », commune à toutes les listes.
+ * remove() supprime et renvoie l'élément supprimé ; restore(élément) le remet ;
+ * onDone() réaffiche l'écran (après la suppression et après l'annulation).
+ */
+export async function deleteWithUndo({ remove, restore, message, onDone }) {
+  let removed;
+  try {
+    removed = await remove();
+  } catch (err) {
+    toast(`Suppression impossible : ${err.message}`);
+    if (onDone) onDone();
+    return null;
+  }
+  if (onDone) onDone();
+  toast(message, {
+    duration: 5000,
+    action: {
+      label: 'Annuler',
+      onClick: async () => {
+        try {
+          if (removed) await restore(removed);
+        } catch (err) {
+          toast(`Annulation impossible : ${err.message}`);
+        }
+        if (onDone) onDone();
+      }
+    }
+  });
+  return removed;
 }

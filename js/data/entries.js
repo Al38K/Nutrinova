@@ -23,6 +23,11 @@ export async function getEntriesForDate(date) {
   return list.sort(byMealThenTime);
 }
 
+/** Entrées entre deux dates incluses ('AAAA-MM-JJ'), toutes repas confondus. */
+export function getEntriesBetween(from, to) {
+  return db.getAllByIndex(STORES.journal, 'date', IDBKeyRange.bound(from, to));
+}
+
 export function getEntry(id) {
   return db.get(STORES.journal, id);
 }

@@ -9,6 +9,8 @@ import * as db from './db.js';
 import { SCHEMA, SCHEMA_VERSION, STORES } from './schema.js';
 import { createFood, createJournalEntry, createRecipe, createGoal, createWeight, createCiqualItem, createActivity, ValidationError } from './model.js';
 import { saveActivity, getActivitiesForDate, deleteActivity, restoreActivity, burnedKcal, kcalBudget } from './activities.js';
+import { periodRange, dailySeries, summarize, goalAt } from './progress.js';
+import { createMeasurement, saveMeasurement, deleteMeasurement, restoreMeasurement, listMeasurements, seriesOf, latestById, parseTracked, isTrackedText } from './measurements.js';
 import { scaleNutrients, sumNutrients, checkEnergyCoherence, normalizeNutrients, NutrientError } from './nutrients.js';
 import { getSetting, THEMES, STYLES, ACCENT_IDS } from './settings.js';
 import { addEntry, updateEntry, deleteEntry, restoreEntry, computeTotals, resolveQuantity } from './entries.js';
@@ -92,6 +94,7 @@ async function cleanup() {
     tx.objectStore(STORES.weights).delete(TEST_DATE_2);
     tx.objectStore(STORES.weights).delete(TEST_DATE_3);
     tx.objectStore(STORES.ciqual).delete(TEST_IDS.ciqual);
+    for (const d of [TEST_DATE, TEST_DATE_2, TEST_DATE_3]) tx.objectStore(STORES.measurements).delete(d);
     const acts = tx.objectStore(STORES.activities);
     for (const d of [TEST_DATE, TEST_DATE_2]) {
       const keys = await db.req(acts.index('date').getAllKeys(d));
@@ -649,6 +652,66 @@ const TESTS = [
       expectThrow(() => validateBackup({ ...base, data: { activities: [{ ...edited, kcal: -5 }] } }), BackupError, 'Activité invalide refusée à l\'import');
       assertEq(validateBackup({ ...base, schemaVersion: 1, data: { journal: [] } }).counts.activities, 0, 'Ancienne sauvegarde (sans activités) acceptée');
       return '250 + 120,5 kcal, objectif 2 000 → 2 370,5 kcal disponibles';
+    }
+  },
+  {
+    name: 'Mensurations : saisie, une par jour, séries, sauvegarde',
+    async run() {
+      const today = '1900-01-31';
+      await saveMeasurement({ date: TEST_DATE, values: { waist: 84.5, hips: 99, arm: '' } }, { today });
+      await saveMeasurement({ date: TEST_DATE_2, values: { waist: 83, bodyFat: 24.6 } }, { today });
+      const r = await saveMeasurement({ date: TEST_DATE_2, values: { waist: 82.5, bodyFat: 24.4 } }, { today });
+      assert(r.replaced && r.replaced.values.waist === 83, 'Même jour : la nouvelle saisie remplace l\'ancienne (signalé)');
+      const mine = (await listMeasurements()).filter((m) => m.date < '1900-12-31');
+      assertEq(mine.map((m) => m.date), [TEST_DATE, TEST_DATE_2], 'Saisies triées par date');
+      assertEq(Object.keys(mine[0].values), ['waist', 'hips'], 'Mesure vide ignorée (pas de 0)');
+      assertEq(seriesOf(mine, 'waist').map((p) => p.value), [84.5, 82.5], 'Série du tour de taille');
+      assertEq(seriesOf(mine, 'hips').length, 1, 'Hanches : mesuré une seule fois');
+      const lt = latestById(mine);
+      assert(lt.waist.last.value === 82.5 && lt.waist.prev.value === 84.5 && lt.hips.prev === null, 'Dernière et précédente valeur par mesure');
+      const moved = await saveMeasurement({ date: TEST_DATE_3, values: { waist: 84 } }, { originalDate: TEST_DATE, today });
+      assert(moved.replaced === null, 'Changement de date vers un jour libre');
+      let refused = 0;
+      for (const bad of [{ date: TEST_DATE, values: {} }, { date: TEST_DATE, values: { waist: 5 } }, { date: TEST_DATE, values: { waist: 80.25 } }, { date: '1900-02-01', values: { waist: 80 } }]) {
+        try { await saveMeasurement(bad, { today }); } catch (err) { if (err instanceof ValidationError) refused += 1; }
+      }
+      assertEq(refused, 4, 'Aucune mesure, 5 cm, 2 décimales, date future : refusés');
+      const removed = await deleteMeasurement(TEST_DATE_3);
+      await restoreMeasurement(removed);
+      assert((await listMeasurements()).some((m) => m.date === TEST_DATE_3), 'Suppression annulée');
+      assertEq(parseTracked('hips,waist,inconnu'), ['waist', 'hips'], 'Mesures suivies : ordre fixe, inconnues ignorées');
+      assertEq(parseTracked(null).length, 5, 'Réglage absent : 5 mesures par défaut');
+      assert(isTrackedText('') && !isTrackedText('taille'), 'Contrôle du réglage');
+      const base = { format: BACKUP_FORMAT, formatVersion: BACKUP_FORMAT_VERSION, schemaVersion: SCHEMA_VERSION };
+      assertEq(validateBackup({ ...base, data: { measurements: [createMeasurement({ date: TEST_DATE, values: { waist: 80 } })] } }).counts.measurements, 1, 'Sauvegarde : mensurations reconnues');
+      expectThrow(() => validateBackup({ ...base, data: { measurements: [{ date: TEST_DATE, values: { waist: 500 } }] } }), BackupError, 'Mesure impossible refusée à l\'import');
+      return 'taille 84,5 → 82,5 cm, remplacement, refus, sauvegarde';
+    }
+  },
+  {
+    name: 'Suivi : journées, objectif + activité, moyennes, statuts',
+    async run() {
+      assertEq(periodRange(7, '2026-10-27'), { from: '2026-10-20', to: '2026-10-26' }, '7 journées terminées, aujourd\'hui exclu');
+      const nul = { fiber: null, sugars: null, salt: null, alcohol: null };
+      const e = (date, kcal, protein = 10) => ({ date, meal: 'lunch', quantity: 100, per100Snapshot: { kcal, protein, carbs: 10, fat: 5, ...nul } });
+      const goals = [{ id: 'b', effectiveFrom: '2026-01-03', kcal: 1800, mode: 'grams', protein: 100, carbs: null, fat: null }, { id: 'a', effectiveFrom: '2026-01-01', kcal: 2000, mode: 'grams', protein: 120, carbs: null, fat: null }];
+      assertEq(goalAt([...goals].reverse(), '2026-01-02').id, 'a', 'Objectif en vigueur à une date');
+      const days = dailySeries({
+        from: '2026-01-01', to: '2026-01-05',
+        entries: [e('2026-01-01', 1900), e('2026-01-02', 2500), e('2026-01-03', 1000), e('2026-01-04', null)],
+        activities: [{ date: '2026-01-03', kcal: 200 }],
+        goals
+      });
+      assertEq(days.map((d) => d.status), ['near', 'over', 'under', 'partial', 'empty'], 'Statuts : ±10 %, au-dessus, en dessous, partiel, vide');
+      assertEq(days[2].budget, 2000, 'Objectif 1 800 + 200 kcal d\'activité');
+      const sum = summarize(days);
+      assertEq([sum.logged, sum.days], [4, 5], 'Journées saisies');
+      assert(approx(sum.avg.kcal, (1900 + 2500 + 1000) / 3) && sum.partial.kcal, 'Moyenne des kcal connues, signalée partielle');
+      assert(approx(sum.avg.protein, 10), 'Moyenne des protéines par journée saisie');
+      assert(approx(sum.avgTargets.protein, (120 + 120 + 100 + 100) / 4), 'Objectif moyen de protéines');
+      assertEq([sum.counts.near, sum.counts.under, sum.counts.over, sum.counts.partial], [1, 1, 1, 1], 'Décompte des journées');
+      assertEq([sum.burned.total, sum.burned.days], [200, 1], 'Activité sur la période');
+      return '5 jours : 1 proche, 1 au-dessus, 1 en dessous, 1 partiel, 1 vide';
     }
   },
   {

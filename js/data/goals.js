@@ -40,8 +40,20 @@ export async function saveGoal(input) {
   });
 }
 
+/** Supprime un objectif et le renvoie (pour l'annulation). */
 export function deleteGoal(id) {
-  return db.del(STORES.goals, id);
+  return db.run(STORES.goals, 'readwrite', async (tx) => {
+    const os = tx.objectStore(STORES.goals);
+    const goal = await db.req(os.get(id));
+    os.delete(id);
+    return goal || null;
+  });
+}
+
+/** Remet un objectif supprimé (annulation). */
+export async function restoreGoal(goal) {
+  await db.put(STORES.goals, goal);
+  return goal;
 }
 
 /**

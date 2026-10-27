@@ -5,7 +5,8 @@ import { localDateKey, isDateKey, dayTitle } from '../util/dates.js';
 import { formatNumber, formatNutrient, isNum } from '../util/format.js';
 import { MEAL_IDS, MEAL_LABELS } from '../data/model.js';
 import { NUTRIENT_META } from '../data/nutrients.js';
-import { getEntriesForDate, computeTotals } from '../data/entries.js';
+import { getEntriesForDate, computeTotals, deleteEntry, restoreEntry } from '../data/entries.js';
+import { swipeToDelete, deleteWithUndo } from '../components/swipe.js';
 import { entryRow, partialNote } from '../components/journal-parts.js';
 import { energySplit } from '../components/energy-split.js';
 import { openFoodPicker } from '../sheets/food-picker.js';
@@ -78,8 +79,11 @@ export default {
       }),
       h('section', {},
         h('h2', { class: 'section-header' }, `Aliments (${meal.count})`),
-        h('div', { class: 'list' }, meal.entries.map((e) => entryRow(e, (entry) => openEntrySheet({ entry, onDone: refresh })))),
-        h('p', { class: 'section-footer' }, 'Touchez un aliment pour modifier la quantité, changer de repas ou le supprimer.')
+        h('div', { class: 'list' }, meal.entries.map((e) => swipeToDelete(entryRow(e, (entry) => openEntrySheet({ entry, onDone: refresh })), {
+          label: e.nameSnapshot,
+          onDelete: () => deleteWithUndo({ remove: () => deleteEntry(e.id), restore: restoreEntry, message: `Supprimé : ${e.nameSnapshot}`, onDone: refresh })
+        }))),
+        h('p', { class: 'section-footer' }, 'Touchez un aliment pour modifier la quantité ou changer de repas. Glissez-le vers la gauche pour le supprimer.')
       ),
       h('button', { type: 'button', class: 'btn btn-tinted btn-lg btn-block', onclick: add }, iconEl('plus'), 'Ajouter un aliment')
     );

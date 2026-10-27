@@ -38,13 +38,15 @@ export function formatKg(v) {
 /**
  * points : pesées de la période (triées) ; average : moyenne mobile pour ces mêmes dates ;
  * domain : { from, to } dates 'AAAA-MM-JJ' de l'axe horizontal.
+ * Options (courbe d'une mensuration, v1.7) : value(point) → nombre, format(nombre) → texte,
+ * title (nom lu par VoiceOver), pointLabel (légende des points), showAverage.
  * Renvoie un élément (lecture de la pesée choisie + graphique).
  */
-export function weightChart({ points, average, domain }) {
+export function weightChart({ points, average = [], domain, value = (p) => p.weightKg, format = formatKg, title = 'Courbe du poids', pointLabel = 'Pesée', showAverage = true }) {
   let x0 = dayNum(domain.from);
   let x1 = dayNum(domain.to);
   if (x1 - x0 < 6) { x0 -= 3; x1 += 3; }
-  const values = [...points.map((p) => p.weightKg), ...average.map((a) => a.value)];
+  const values = [...points.map((p) => value(p)), ...average.filter(Boolean).map((a) => a.value)];
   let lo = Math.min(...values);
   let hi = Math.max(...values);
   const pad = Math.max((hi - lo) * 0.15, 0.4);
@@ -60,7 +62,7 @@ export function weightChart({ points, average, domain }) {
   const svg = s('svg', { viewBox: `0 0 ${W} ${H}`, class: 'wchart-svg', role: 'img' });
   const first = points[0];
   const last = points[points.length - 1];
-  svg.setAttribute('aria-label', `Courbe du poids : ${points.length} pesées, de ${formatKg(first.weightKg)} le ${formatDayLong(first.date)} à ${formatKg(last.weightKg)} le ${formatDayLong(last.date)}.`);
+  svg.setAttribute('aria-label', `${title} : ${points.length} mesures, de ${format(value(first))} le ${formatDayLong(first.date)} à ${format(value(last))} le ${formatDayLong(last.date)}.`);
 
   // Grille horizontale et graduations
   const ticks = Math.round((yMax - yMin) / step);
@@ -90,12 +92,12 @@ export function weightChart({ points, average, domain }) {
   }
 
   // Pesées : trait fin et points
-  const rawD = points.map((p, i) => `${i ? 'L' : 'M'}${px(p.date).toFixed(1)},${py(p.weightKg).toFixed(1)}`).join('');
-  if (points.length > 1) svg.append(s('path', { d: rawD, class: 'wchart-raw' }));
-  for (const p of points) svg.append(s('circle', { cx: px(p.date), cy: py(p.weightKg), r: 2.6, class: 'wchart-dot' }));
+  const rawD = points.map((p, i) => `${i ? 'L' : 'M'}${px(p.date).toFixed(1)},${py(value(p)).toFixed(1)}`).join('');
+  if (points.length > 1) svg.append(s('path', { d: rawD, class: showAverage ? 'wchart-raw' : 'wchart-raw is-main' }));
+  for (const p of points) svg.append(s('circle', { cx: px(p.date), cy: py(value(p)), r: 2.6, class: 'wchart-dot' }));
 
   // Moyenne mobile
-  if (average.length > 1) {
+  if (showAverage && average.length > 1) {
     const avgD = average.map((a, i) => `${i ? 'L' : 'M'}${px(a.date).toFixed(1)},${py(a.value).toFixed(1)}`).join('');
     svg.append(s('path', { d: avgD, class: 'wchart-avg' }));
   }
@@ -113,12 +115,12 @@ export function weightChart({ points, average, domain }) {
     guide.setAttribute('x1', x);
     guide.setAttribute('x2', x);
     mark.setAttribute('cx', x);
-    mark.setAttribute('cy', py(p.weightKg));
+    mark.setAttribute('cy', py(value(p)));
     // replaceChildren écrirait « null » en texte : seuls les éléments présents sont passés.
     readout.replaceChildren(...[
       h('span', { class: 'wchart-readout-date' }, formatDayLong(p.date)),
-      h('span', { class: 'wchart-readout-value t-num' }, formatKg(p.weightKg)),
-      a && a.count > 1 ? h('span', { class: 'wchart-readout-avg' }, `moyenne 7 j : ${formatKg(a.value)} (${a.count} pesées)`) : null
+      h('span', { class: 'wchart-readout-value t-num' }, format(value(p))),
+      showAverage && a && a.count > 1 ? h('span', { class: 'wchart-readout-avg' }, `moyenne 7 j : ${formatKg(a.value)} (${a.count} pesées)`) : null
     ].filter(Boolean));
   }
 
@@ -148,8 +150,8 @@ export function weightChart({ points, average, domain }) {
     readout,
     svg,
     h('div', { class: 'wchart-legend', 'aria-hidden': 'true' },
-      h('span', {}, h('span', { class: 'wchart-key wchart-key-dot' }), 'Pesée'),
-      h('span', {}, h('span', { class: 'wchart-key wchart-key-avg' }), 'Moyenne sur 7 jours')
+      h('span', {}, h('span', { class: 'wchart-key wchart-key-dot' }), pointLabel),
+      showAverage ? h('span', {}, h('span', { class: 'wchart-key wchart-key-avg' }), 'Moyenne sur 7 jours') : null
     )
   );
 }

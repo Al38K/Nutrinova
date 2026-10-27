@@ -15,6 +15,11 @@ export async function getActivitiesForDate(date) {
   return list.sort((a, b) => (a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : 0));
 }
 
+/** Activités entre deux dates incluses. */
+export function getActivitiesBetween(from, to) {
+  return db.getAllByIndex(STORES.activities, 'date', IDBKeyRange.bound(from, to));
+}
+
 /** Total des calories dépensées (0 s'il n'y a rien). */
 export function burnedKcal(list) {
   return (list || []).reduce((sum, a) => sum + (isNum(a.kcal) ? a.kcal : 0), 0);

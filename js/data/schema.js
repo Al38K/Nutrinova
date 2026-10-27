@@ -2,7 +2,7 @@
 // Toute évolution future = SCHEMA_VERSION + 1 et une nouvelle entrée dans MIGRATIONS.
 // Les migrations existantes ne sont JAMAIS modifiées une fois livrées.
 
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 export const STORES = Object.freeze({
   foods: 'foods',
@@ -12,6 +12,7 @@ export const STORES = Object.freeze({
   goals: 'goals',
   weights: 'weights',
   activities: 'activities',
+  measurements: 'measurements',
   settings: 'settings'
 });
 
@@ -23,6 +24,7 @@ export const STORE_LABELS = Object.freeze({
   goals: 'Objectifs',
   weights: 'Pesées',
   activities: 'Activités',
+  measurements: 'Mensurations',
   settings: 'Réglages'
 });
 
@@ -78,6 +80,11 @@ export const SCHEMA = Object.freeze({
       date: { keyPath: 'date' }
     }
   },
+  // v3 (v1.7.0) : mensurations, une saisie par jour (clé = date).
+  measurements: {
+    keyPath: 'date',
+    indexes: {}
+  },
   settings: {
     keyPath: 'key',
     indexes: {}
@@ -105,6 +112,10 @@ const MIGRATIONS = {
   // v2 (v1.6.0) : table des activités. Les données existantes ne sont pas touchées.
   2(db) {
     if (!db.objectStoreNames.contains('activities')) createStoreFromSchema(db, 'activities');
+  },
+  // v3 (v1.7.0) : table des mensurations. Les données existantes ne sont pas touchées.
+  3(db) {
+    if (!db.objectStoreNames.contains('measurements')) createStoreFromSchema(db, 'measurements');
   }
 };
 

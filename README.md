@@ -1,6 +1,6 @@
 # nutrinova
 
-Application personnelle de suivi nutritionnel pour iPhone : journal des 4 repas, objectifs (calories et macros), calories dépensées (activité), scan des codes-barres, table Ciqual, recettes et suivi du poids.
+Application personnelle de suivi nutritionnel pour iPhone : journal des 4 repas, objectifs (calories et macros), calories dépensées (activité), scan des codes-barres, table Ciqual, recettes, poids, mensurations et suivi de l'évolution.
 
 C'est une application web installable (PWA), hébergée gratuitement sur GitHub Pages. Toutes les données personnelles restent sur l'iPhone. Elles ne sont jamais envoyées à GitHub. Seuls un code-barres ou un texte recherché sont envoyés à Open Food Facts.
 
@@ -15,14 +15,16 @@ Adresse de l'app : https://al38k.github.io/nutrinova/
 
 ## Gestes et réglages utiles
 
-- **Glisser vers la gauche** une recette (onglet Recettes), un ingrédient (modification d'une recette) ou une activité pour la supprimer. Un message « Annuler » permet de revenir en arrière pendant quelques secondes.
+- **Glisser vers la gauche** pour supprimer, dans toutes les listes : entrées du journal, vos aliments, recettes, ingrédients d'une recette, activités, pesées, mensurations et objectifs. Un message « Annuler » permet de revenir en arrière pendant quelques secondes.
 - **Activité** (carte en bas du Journal) : saisissez les calories dépensées indiquées par votre montre ou votre appareil. Elles s'ajoutent à l'objectif calorique du jour ; les objectifs de macros ne changent pas.
 - **Carte des macros** : touchez « Fibres, sucres, sel, alcool » pour la déplier.
+- **Corps** : poids et mensurations (tours de taille, hanches, poitrine, bras, cuisse… à choisir dans « Mesures suivies »).
+- **Suivi** : sur 7, 30 ou 90 journées terminées, calories de chaque jour face à l'objectif, moyennes des macros, activité, poids et mensurations.
 - **Apparence** (Réglages) : thème clair ou sombre, style Classique ou Verre, et couleur de l'app.
 
 ## Sauvegarder, restaurer, changer d'iPhone
 
-- **Sauvegarder** : Réglages › Exporter mes données › Enregistrer dans Fichiers › iCloud Drive. Le fichier `nutrinova-sauvegarde-AAAA-MM-JJ.json` contient le journal, les aliments, les recettes, les objectifs, les pesées, les activités et les réglages.
+- **Sauvegarder** : Réglages › Exporter mes données › Enregistrer dans Fichiers › iCloud Drive. Le fichier `nutrinova-sauvegarde-AAAA-MM-JJ.json` contient le journal, les aliments, les recettes, les objectifs, les pesées, les mensurations, les activités et les réglages.
 - **Rappel** : une bannière s'affiche dans le Journal quand la dernière sauvegarde date de 7 jours ou plus. Sa croix la masque jusqu'au lendemain. Vous pouvez changer cette fréquence ou couper le rappel dans Réglages › Rappel de sauvegarde.
 - **Restaurer ou changer d'iPhone** : installez l'app sur le nouvel iPhone, puis Réglages › Importer une sauvegarde › choisissez le fichier › Tout remplacer.
 - **Attention** : supprimer l'icône de l'écran d'accueil efface les données de l'iPhone. Exportez-les avant.

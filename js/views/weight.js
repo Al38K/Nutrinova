@@ -1,17 +1,22 @@
-// Onglet Poids : dernière pesée, courbe (pesées + moyenne mobile sur 7 jours) sur 1 mois, 3 mois,
+// Onglet Corps : deux parties, Poids et Mensurations (choix en haut de l'écran).
+// Poids : dernière pesée, courbe (pesées + moyenne mobile sur 7 jours) sur 1 mois, 3 mois,
 // 1 an ou tout, statistiques de la période, rappel hebdomadaire, historique des pesées.
+// Mensurations : voir components/measures-view.js.
 
 import { h, mount, setAppbar, iconEl, emptyState, segmented, section, row } from '../ui.js';
 import { formatNumber } from '../util/format.js';
 import { localDateKey, formatDayLong, formatDayShort } from '../util/dates.js';
-import { listWeights, movingAverage, periodStart, weightStats, PERIODS } from '../data/weights.js';
+import { listWeights, movingAverage, periodStart, weightStats, deleteWeight, restoreWeights, PERIODS } from '../data/weights.js';
+import { swipeToDelete, deleteWithUndo } from '../components/swipe.js';
 import { getReminder, reminderStatus, reminderLabel } from '../data/reminder.js';
 import { weightChart, formatKg } from '../components/weight-chart.js';
 import { openWeightSheet, openReminderSheet, weighBanner } from '../sheets/weight-sheets.js';
 import { refresh } from '../router.js';
+import { listMeasurements, getTracked } from '../data/measurements.js';
+import { measuresView } from '../components/measures-view.js';
 
 // Période choisie et affichage de l'historique, conservés pendant la session.
-const memo = { period: '3m', showAll: false };
+const memo = { period: '3m', showAll: false, part: 'weight' };
 const HISTORY_SHOWN = 20;
 
 /** « +1,2 kg », « −0,4 kg », « 0,0 kg » */
@@ -66,7 +71,7 @@ function historyList(weights, onEdit) {
     const prev = i > 0 ? weights[i - 1] : null;
     const delta = prev ? w.weightKg - prev.weightKg : null;
     const r = delta === null ? null : Math.round(delta * 10) / 10;
-    return h('button', { type: 'button', class: 'entry-row', onclick: () => onEdit(w) },
+    return swipeToDelete(h('button', { type: 'button', class: 'entry-row', onclick: () => onEdit(w) },
       h('span', { class: 'entry-main' },
         h('span', { class: 'entry-name' }, formatDayLong(w.date)),
         h('span', { class: 'entry-sub' }, [
@@ -76,7 +81,15 @@ function historyList(weights, onEdit) {
       ),
       h('span', { class: 'entry-kcal t-num weight-value' }, formatKg(w.weightKg)),
       iconEl('chevronRight', 'row-chevron')
-    );
+    ), {
+      label: `la pesée du ${formatDayShort(w.date)}`,
+      onDelete: () => deleteWithUndo({
+        remove: () => deleteWeight(w.date),
+        restore: (removed) => restoreWeights([removed]),
+        message: `Pesée du ${formatDayShort(w.date)} supprimée`,
+        onDone: refresh
+      })
+    });
   });
   return h('section', {},
     h('h2', { class: 'section-header' }, 'Historique'),
@@ -88,24 +101,51 @@ function historyList(weights, onEdit) {
           onclick: () => { memo.showAll = !memo.showAll; refresh(); }
         }, memo.showAll ? 'Afficher moins' : `Afficher les ${formatNumber(desc.length)} pesées`)
       : null,
-    h('p', { class: 'section-footer' }, 'Touchez une pesée pour la modifier ou la supprimer.')
+    h('p', { class: 'section-footer' }, 'Touchez une pesée pour la modifier. Glissez-la vers la gauche pour la supprimer.')
   );
 }
 
 export default {
   tab: 'weight',
-  async render(root) {
+  async render(root, { params = [], navigate } = {}) {
     const today = localDateKey();
-    const [weights, reminder] = await Promise.all([listWeights(), getReminder()]);
+    if (params[0] === 'mensurations') memo.part = 'measures';
+    else if (params[0] === 'poids') memo.part = 'weight';
+    const [weights, reminder, measures, tracked] = await Promise.all([
+      listWeights(),
+      getReminder(),
+      listMeasurements().catch((err) => { console.warn('Mensurations non lues :', err); return []; }),
+      getTracked().catch(() => [])
+    ]);
     const latest = weights.length ? weights[weights.length - 1] : null;
 
     const add = () => openWeightSheet({ weights, onDone: refresh });
     const edit = (w) => openWeightSheet({ weights, weight: w, onDone: refresh });
+    const mv = measuresView({ list: measures, tracked, today });
+    const isMeasures = memo.part === 'measures';
 
     setAppbar({
-      title: 'Poids',
-      trailing: h('button', { type: 'button', class: 'appbar-btn', 'aria-label': 'Ajouter une pesée', onclick: add }, iconEl('plus'))
+      title: 'Corps',
+      trailing: h('button', {
+        type: 'button',
+        class: 'appbar-btn',
+        'aria-label': isMeasures ? 'Ajouter des mesures' : 'Ajouter une pesée',
+        onclick: isMeasures ? mv.add : add
+      }, iconEl('plus'))
     });
+
+    const partControl = segmented({
+      label: 'Partie affichée',
+      value: memo.part,
+      options: [{ value: 'weight', label: 'Poids' }, { value: 'measures', label: 'Mensurations' }],
+      // L'adresse suit la partie affichée (#/weight/poids ou #/weight/mensurations).
+      onChange: (v) => { memo.part = v; navigate(`weight/${v === 'measures' ? 'mensurations' : 'poids'}`, { replace: true }); }
+    });
+
+    if (isMeasures) {
+      mount(root, partControl, mv.nodes);
+      return;
+    }
 
     const status = reminderStatus(reminder, latest ? latest.date : null);
     const reminderSection = section({
@@ -122,6 +162,7 @@ export default {
 
     if (!weights.length) {
       mount(root,
+        partControl,
         weighBanner(status, add),
         emptyState({
           iconName: 'weight',
@@ -143,6 +184,7 @@ export default {
     paintChart();
 
     mount(root,
+      partControl,
       weighBanner(status, add),
       h('section', { class: 'card stack', 'aria-label': 'Dernière pesée' },
         h('p', { class: 't-footnote t-secondary' }, `Dernière pesée · ${formatDayLong(latest.date)}`),

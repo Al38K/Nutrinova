@@ -5,6 +5,7 @@ import * as db from './db.js';
 import { STORES, STORE_LABELS, SCHEMA_VERSION } from './schema.js';
 import { SETTING_DEFAULTS, THEMES, STYLES, ACCENT_IDS, setSetting, applyAppearance } from './settings.js';
 import { createFood, createRecipe, createJournalEntry, createGoal, createWeight, createActivity } from './model.js';
+import { createMeasurement, isTrackedText } from './measurements.js';
 import { APP_NAME, APP_VERSION } from '../config.js';
 import { localDateKey, nowIso, daysSince } from '../util/dates.js';
 
@@ -13,7 +14,7 @@ export const BACKUP_FORMAT_VERSION = 1;
 
 // La table Ciqual (référence en lecture seule, Phase 3) n'est pas exportée : elle est fournie avec l'app.
 export const BACKUP_STORES = Object.freeze([
-  STORES.foods, STORES.recipes, STORES.journal, STORES.goals, STORES.weights, STORES.activities, STORES.settings
+  STORES.foods, STORES.recipes, STORES.journal, STORES.goals, STORES.weights, STORES.activities, STORES.measurements, STORES.settings
 ]);
 
 // Réglages propres à cet appareil (diagnostic, date de sauvegarde, table Ciqual) : jamais exportés.
@@ -27,7 +28,7 @@ const WEIGH_KEYS = Object.freeze(['weighReminder', 'weighDay', 'weighTime']);
 export const BACKUP_REMINDER_CHOICES = Object.freeze([0, 3, 7, 14, 30]);
 export const DEFAULT_BACKUP_REMINDER_DAYS = 7;
 // Tables dont le contenu justifie une sauvegarde (vos aliments seuls n'y suffisent pas : le cache Open Food Facts s'y trouve).
-const DATA_STORES = Object.freeze([STORES.journal, STORES.recipes, STORES.weights, STORES.goals, STORES.activities]);
+const DATA_STORES = Object.freeze([STORES.journal, STORES.recipes, STORES.weights, STORES.goals, STORES.activities, STORES.measurements]);
 
 /** Fréquence valide (jours) à partir du réglage ; null ou valeur inconnue → 7 jours. */
 export function reminderEvery(days) {
@@ -55,7 +56,7 @@ export function backupReminderStatus({ lastBackupAt, reminderDays, dataCount, hi
   return { due, since, every, hiddenToday };
 }
 
-/** Nombre d'éléments personnels (journal, recettes, pesées, objectifs, activités) : 0 = rien à sauvegarder. */
+/** Nombre d'éléments personnels (journal, recettes, pesées, objectifs, activités, mensurations) : 0 = rien à sauvegarder. */
 export async function countPersonalData() {
   const counts = await db.countAll(DATA_STORES);
   return Object.values(counts).reduce((a, b) => a + b, 0);
@@ -207,6 +208,10 @@ const VALIDATORS = {
     requireId(rec);
     return keepUpdatedAt(createActivity(rec), rec);
   },
+  measurements(rec) {
+    asObject(rec);
+    return keepUpdatedAt(createMeasurement(rec), rec);
+  },
   settings(rec) {
     asObject(rec);
     if (!IMPORTABLE_SETTINGS.includes(rec.key)) return null; // réglage ignoré
@@ -216,6 +221,7 @@ const VALIDATORS = {
     if (rec.key === 'theme' && !THEMES.includes(v)) throw new Error(`thème inconnu « ${v} ».`);
     if (rec.key === 'style' && !STYLES.includes(v)) throw new Error(`style inconnu « ${v} ».`);
     if (rec.key === 'accent' && !ACCENT_IDS.includes(v)) throw new Error(`couleur inconnue « ${v} ».`);
+    if (rec.key === 'measuresTracked' && !isTrackedText(v)) throw new Error(`mensurations suivies invalides « ${v} ».`);
     // Rappel de pesée (Phase 5) : une valeur vide d'une ancienne sauvegarde garde le réglage par défaut.
     if (WEIGH_KEYS.includes(rec.key) && v === null) return null;
     if (rec.key === 'weighReminder' && typeof v !== 'boolean') throw new Error('rappel de pesée invalide.');
@@ -230,7 +236,7 @@ const VALIDATORS = {
   }
 };
 
-const KEY_OF = { foods: 'id', recipes: 'id', journal: 'id', goals: 'id', weights: 'date', activities: 'id', settings: 'key' };
+const KEY_OF = { foods: 'id', recipes: 'id', journal: 'id', goals: 'id', weights: 'date', activities: 'id', measurements: 'date', settings: 'key' };
 
 /**
  * Vérifie un objet de sauvegarde sans rien écrire.
@@ -314,7 +320,7 @@ export async function applyBackup(parsed, mode) {
   await db.run(BACKUP_STORES, 'readwrite', async (tx) => {
     const os = (name) => tx.objectStore(name);
     if (mode === 'replace') {
-      for (const s of [STORES.foods, STORES.recipes, STORES.journal, STORES.goals, STORES.weights, STORES.activities]) os(s).clear();
+      for (const s of [STORES.foods, STORES.recipes, STORES.journal, STORES.goals, STORES.weights, STORES.activities, STORES.measurements]) os(s).clear();
       for (const key of IMPORTABLE_SETTINGS) os(STORES.settings).delete(key);
     }
     for (const f of data.foods) os(STORES.foods).put(f);
@@ -322,6 +328,7 @@ export async function applyBackup(parsed, mode) {
     for (const e of data.journal) os(STORES.journal).put(e);
     for (const w of data.weights) os(STORES.weights).put(w);
     for (const a of data.activities) os(STORES.activities).put(a);
+    for (const m of data.measurements) os(STORES.measurements).put(m);
     for (const s of data.settings) os(STORES.settings).put({ key: s.key, value: s.value, updatedAt: now });
 
     const goals = os(STORES.goals);

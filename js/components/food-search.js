@@ -56,7 +56,8 @@ function debounce(fn, ms) {
  * - side(kind, item) : élément à droite de chaque ligne (kind = 'local' | 'ciqual' | 'off') ;
  * - open(kind, item) : toucher une ligne ;
  * - renderEmpty(container) : contenu quand la recherche est vide ;
- * - initialQuery, onQuery(q) : mémorisation de la recherche par l'écran appelant.
+ * - initialQuery, onQuery(q) : mémorisation de la recherche par l'écran appelant ;
+ * - wrapLocal(rowEl, food) facultatif : enveloppe les lignes « Vos aliments » (ex. glisser pour supprimer).
  * Renvoie { bar, results, input, render(), destroy() } : barre de recherche et zone de résultats,
  * à placer par l'écran appelant.
  */
@@ -180,13 +181,14 @@ export function createFoodSearch(opts) {
     const parts = [];
 
     if (local.length) {
-      parts.push(group('Vos aliments', local.slice(0, MAX_LOCAL).map((food) => foodRow({
+      const wrap = opts.wrapLocal || ((el) => el);
+      parts.push(group('Vos aliments', local.slice(0, MAX_LOCAL).map((food) => wrap(foodRow({
         title: food.name,
         badge: food.favorite ? iconEl('starFill', 'row-star') : null,
         sub: localSub(food),
         onMain: () => opts.open('local', food),
         side: opts.side('local', food)
-      })), local.length > MAX_LOCAL ? `${MAX_LOCAL} premiers sur ${local.length}.` : null));
+      }), food)), local.length > MAX_LOCAL ? `${MAX_LOCAL} premiers sur ${local.length}.` : null));
     }
 
     const cs = getCiqualState();

@@ -7,7 +7,7 @@ import { localDateKey, isDateKey, addDays, formatDayLong, dayTitle } from '../ut
 import { formatNumber, formatKcal, formatNutrient, isNum } from '../util/format.js';
 import { MEALS } from '../data/model.js';
 import { NUTRIENT_META } from '../data/nutrients.js';
-import { getEntriesForDate, computeTotals } from '../data/entries.js';
+import { getEntriesForDate, computeTotals, deleteEntry, restoreEntry } from '../data/entries.js';
 import { getGoalForDate, goalTargets, goalMacroSummary } from '../data/goals.js';
 import { getSetting, setSetting } from '../data/settings.js';
 import { entryRow, remainingCaption, partialNote } from '../components/journal-parts.js';
@@ -20,7 +20,7 @@ import { getReminder, reminderStatus } from '../data/reminder.js';
 import { openWeightSheet, weighBanner } from '../sheets/weight-sheets.js';
 import { getActivitiesForDate, burnedKcal, kcalBudget } from '../data/activities.js';
 import { openActivitySheet, removeActivity } from '../sheets/activity-sheet.js';
-import { swipeToDelete } from '../components/swipe.js';
+import { swipeToDelete, deleteWithUndo } from '../components/swipe.js';
 import { refresh } from '../router.js';
 
 function dayNav(date, navigate) {
@@ -172,6 +172,19 @@ function activityCard(date, activities, burned) {
   );
 }
 
+/** Entrée du journal glissable vers la gauche pour la supprimer (avec « Annuler »). */
+function swipeEntry(rowEl, entry) {
+  return swipeToDelete(rowEl, {
+    label: entry.nameSnapshot,
+    onDelete: () => deleteWithUndo({
+      remove: () => deleteEntry(entry.id),
+      restore: restoreEntry,
+      message: `Supprimé : ${entry.nameSnapshot}`,
+      onDone: refresh
+    })
+  });
+}
+
 /**
  * Carte repas : titre, kcal du repas, bouton +, et la liste des aliments (nom et kcal seulement).
  * Toucher le titre ouvre la vue Repas : quantités, macros et nutriments de chaque aliment.
@@ -194,7 +207,7 @@ function mealCard({ meal, date, data }) {
   return h('section', { class: 'card meal-card', 'aria-label': meal.label },
     head,
     hasEntries
-      ? h('div', { class: 'meal-entries' }, data.entries.map((e) => entryRow(e, (entry) => openEntrySheet({ entry, onDone: refresh }), { compact: true })))
+      ? h('div', { class: 'meal-entries' }, data.entries.map((e) => swipeEntry(entryRow(e, (entry) => openEntrySheet({ entry, onDone: refresh }), { compact: true }), e)))
       : null
   );
 }

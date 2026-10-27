@@ -591,3 +591,52 @@ label.row:active { background: var(--surface-pressed); }
 .activity-icon { width: 18px; height: 18px; margin-right: 6px; color: var(--warning); }
 .chip-btn { min-height: 36px; padding: 4px 14px; border: 0; font-size: var(--fs-subhead); }
 .chip-btn:active { opacity: 0.6; }
+
+/* =====================================================================
+   v1.7.0 — mensurations, onglet Suivi
+   ===================================================================== */
+
+/* ---------- Mensurations ---------- */
+.measure-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: var(--sp-3) var(--sp-2);
+}
+.measure-cell { display: flex; flex-direction: column; min-width: 0; }
+.measure-name { font-size: var(--fs-footnote); color: var(--label-2); }
+.measure-value { font-family: var(--font-rounded); font-size: var(--fs-title-3); font-weight: var(--fw-bold); }
+.measure-delta { font-size: var(--fs-caption); color: var(--label-2); }
+.measure-chips { gap: var(--sp-2); }
+.chip-btn.is-selected { box-shadow: inset 0 0 0 1.5px var(--brand); }
+
+/* ---------- Onglet Suivi : calories par jour ---------- */
+.kchart-svg {
+  width: 100%;
+  height: auto;
+  overflow: visible;
+  touch-action: pan-y;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.kchart-bar.is-near { fill: var(--brand); }
+.kchart-bar.is-under { fill: color-mix(in srgb, var(--brand) 45%, var(--track)); }
+.kchart-bar.is-over { fill: var(--warning); }
+.kchart-bar.is-partial { fill: var(--label-3); opacity: 0.55; }
+.kchart-bar.is-nogoal { fill: var(--label-2); }
+.kchart-empty { fill: var(--label-3); opacity: 0.6; }
+.kchart-goal { fill: none; stroke: var(--label); stroke-width: 1.6; stroke-dasharray: 4 3; opacity: 0.75; }
+.kchart-select { fill: var(--surface-pressed); }
+.kchart-legend { flex-wrap: wrap; gap: var(--sp-1) var(--sp-3); }
+.kchart-key { display: inline-block; width: 10px; height: 10px; margin-right: 5px; border-radius: 3px; vertical-align: -1px; }
+.kchart-key.is-near { background: var(--brand); }
+.kchart-key.is-under { background: color-mix(in srgb, var(--brand) 45%, var(--track)); }
+.kchart-key.is-over { background: var(--warning); }
+.kchart-key.is-partial { background: var(--label-3); opacity: 0.55; }
+.kchart-key-goal { width: 16px; height: 0; border-top: 2px dashed var(--label); border-radius: 0; opacity: 0.75; vertical-align: middle; }
+.kv-wide { grid-template-columns: auto 1fr; }
+.progress-range { margin-top: var(--sp-2) !important; }
+
+/* Barre d'onglets : 6 onglets */
+.tab { min-width: 0; }
+.tab span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wchart-raw.is-main { stroke: var(--brand); stroke-width: 2.4; opacity: 1; }

@@ -13,7 +13,7 @@ function plural(n, word) {
   return `${formatNumber(n)} ${word}${n > 1 ? 's' : ''}`;
 }
 
-const SHOWN = [STORES.journal, STORES.foods, STORES.recipes, STORES.goals, STORES.weights, STORES.activities];
+const SHOWN = [STORES.journal, STORES.foods, STORES.recipes, STORES.goals, STORES.weights, STORES.measurements, STORES.activities];
 
 function countsList(counts) {
   return h('dl', { class: 'kv card' }, SHOWN.flatMap((s) => [
@@ -108,7 +108,7 @@ function openImportSheet(parsed, { onDone }) {
       const sync = () => {
         explain.textContent = mode === 'merge'
           ? 'Ajoute le contenu du fichier. Un élément déjà présent (même identifiant) est remplacé par celui du fichier. Rien n\'est supprimé.'
-          : 'Efface le journal, les aliments, les recettes, les objectifs, les pesées, les activités et les réglages actuels, puis restaure le fichier.';
+          : 'Efface le journal, les aliments, les recettes, les objectifs, les pesées, les mensurations, les activités et les réglages actuels, puis restaure le fichier.';
         importBtn.className = `btn btn-lg btn-block ${mode === 'replace' ? 'btn-destructive' : 'btn-primary'}`;
       };
 

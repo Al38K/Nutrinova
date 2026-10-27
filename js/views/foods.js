@@ -2,7 +2,9 @@
 // favoris, historique, aliments personnalisés. Toucher un aliment ouvre sa fiche.
 
 import { h, mount, setAppbar, iconEl, segmented, emptyState, toast } from '../ui.js';
-import { listFoods, favoritesOf, recentsOf, setFavorite } from '../data/foods.js';
+import { listFoods, favoritesOf, recentsOf, setFavorite, deleteFood, restoreFood } from '../data/foods.js';
+import { deleteRecipe, restoreRecipe } from '../data/recipes.js';
+import { swipeToDelete, deleteWithUndo } from '../components/swipe.js';
 import { ensureCiqual } from '../data/ciqual.js';
 import { createFoodSearch, foodRow, localSub, group } from '../components/food-search.js';
 import { openFoodSheet } from '../sheets/food-sheet.js';
@@ -87,12 +89,34 @@ export default {
 
     const side = (kind, item) => (kind === 'off' ? null : starBtn(item));
 
-    const row = (food, withSource = false) => foodRow({
+    /**
+     * Glisser vers la gauche : supprime l'aliment de vos aliments (avec « Annuler »).
+     * Un aliment issu d'une recette supprime la recette avec lui (sinon la recette perdrait son aliment).
+     * Les entrées déjà dans le journal ne changent pas.
+     */
+    const swipeFood = (el, food) => swipeToDelete(el, {
+      label: food.name,
+      onDelete: () => (food.source === 'recipe' && food.sourceRef
+        ? deleteWithUndo({
+            remove: () => deleteRecipe(food.sourceRef),
+            restore: restoreRecipe,
+            message: `Recette supprimée : ${food.name}`,
+            onDone: refresh
+          })
+        : deleteWithUndo({
+            remove: () => deleteFood(food.id),
+            restore: restoreFood,
+            message: `Aliment supprimé : ${food.name}`,
+            onDone: refresh
+          }))
+    });
+
+    const row = (food, withSource = false) => swipeFood(foodRow({
       title: food.name,
       sub: withSource ? [sourceLabel(food), localSub(food)].filter(Boolean).join(' · ') : localSub(food),
       onMain: () => open('local', food),
       side: starBtn(food)
-    });
+    }), food);
 
     const renderEmpty = (container) => {
       let list;
@@ -125,6 +149,7 @@ export default {
       renderEmpty,
       initialQuery: memo.query,
       onQuery: (q) => { memo.query = q; },
+      wrapLocal: swipeFood,
       placeholder: 'Rechercher : pomme, riz, yaourt…'
     });
 
@@ -137,7 +162,7 @@ export default {
       search.bar,
       actions,
       search.results,
-      h('p', { class: 'hint' }, 'Sources : vos aliments (prioritaires), table Ciqual de l\'ANSES (Licence Ouverte), Open Food Facts (licence ODbL). Une valeur inconnue reste « — », jamais 0.')
+      h('p', { class: 'hint' }, 'Glissez un de vos aliments vers la gauche pour le supprimer (le journal garde ses entrées). Sources : vos aliments (prioritaires), table Ciqual de l\'ANSES (Licence Ouverte), Open Food Facts (licence ODbL). Une valeur inconnue reste « — », jamais 0.')
     );
     search.render();
     return () => search.destroy();

@@ -2,13 +2,14 @@
 // Calories + macros en grammes ou en % de l'énergie. Chaque objectif a une date d'effet :
 // les jours précédents gardent l'objectif qui était en vigueur.
 
-import { h, mount, setAppbar, iconEl, fieldControl, segmented, banner, toast, confirmDialog } from '../ui.js';
+import { h, mount, setAppbar, iconEl, fieldControl, segmented, banner, toast } from '../ui.js';
 import { localDateKey, isDateKey, formatDayShort } from '../util/dates.js';
 import { parseDecimal, formatNumber, formatKcal, isNum } from '../util/format.js';
 import { ValidationError } from '../data/model.js';
 import { ENERGY_FACTORS, MACRO_KEYS, NUTRIENT_META } from '../data/nutrients.js';
-import { getGoalForDate, listGoals, saveGoal, deleteGoal, goalTargets, goalPercents, goalWarnings, goalMacroSummary, energyOfMacros } from '../data/goals.js';
+import { getGoalForDate, listGoals, saveGoal, deleteGoal, restoreGoal, goalTargets, goalPercents, goalWarnings, goalMacroSummary, energyOfMacros } from '../data/goals.js';
 import { refresh } from '../router.js';
+import { swipeToDelete, deleteWithUndo } from '../components/swipe.js';
 
 function toInputText(n, decimals = 1) {
   if (!isNum(n)) return '';
@@ -165,7 +166,7 @@ export default {
       const detail = g.mode === 'percent' && MACRO_KEYS.every((k) => isNum(t[k]))
         ? ` (${MACRO_KEYS.map((k) => `${formatNumber(t[k])} g`).join(' / ')})`
         : '';
-      return h('div', { class: 'pick-row' },
+      return swipeToDelete(h('div', { class: 'pick-row' },
         h('button', {
           type: 'button',
           class: 'pick-main',
@@ -180,29 +181,16 @@ export default {
             status ? h('span', { class: `chip ${status === 'En cours' ? 'chip-brand' : ''} chip-inline` }, status) : null
           ),
           h('span', { class: 'pick-sub' }, `${formatKcal(g.kcal)} · ${goalMacroSummary(g)}${detail}`)
-        ),
-        h('button', {
-          type: 'button',
-          class: 'btn btn-plain btn-icon pick-side text-danger',
-          'aria-label': `Supprimer l'objectif du ${formatDayShort(g.effectiveFrom)}`,
-          onclick: async () => {
-            const ok = await confirmDialog({
-              title: 'Supprimer cet objectif ?',
-              text: `Les jours à partir du ${formatDayShort(g.effectiveFrom)} utiliseront l'objectif précédent, s'il existe.`,
-              confirmLabel: 'Supprimer',
-              destructive: true
-            });
-            if (!ok) return;
-            try {
-              await deleteGoal(g.id);
-              toast('Objectif supprimé');
-              refresh();
-            } catch (err) {
-              toast(`Suppression impossible : ${err.message}`);
-            }
-          }
-        }, iconEl('trash'))
-      );
+        )
+      ), {
+        label: `l'objectif du ${formatDayShort(g.effectiveFrom)}`,
+        onDelete: () => deleteWithUndo({
+          remove: () => deleteGoal(g.id),
+          restore: restoreGoal,
+          message: `Objectif du ${formatDayShort(g.effectiveFrom)} supprimé`,
+          onDone: refresh
+        })
+      });
     });
 
     mount(root,
@@ -218,7 +206,7 @@ export default {
         ? h('section', {},
             h('h2', { class: 'section-header' }, 'Historique'),
             h('div', { class: 'pick-list' }, historyRows),
-            h('p', { class: 'section-footer' }, 'Touchez un objectif pour recharger ses valeurs dans le formulaire.')
+            h('p', { class: 'section-footer' }, 'Touchez un objectif pour recharger ses valeurs dans le formulaire. Glissez-le vers la gauche pour le supprimer : les jours concernés reprennent l\'objectif précédent.')
           )
         : null
     );
